@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pi Aircraft Detector</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f0f0f0;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        header {
+            background-color: #333;
+            color: white;
+            padding: 10px 20px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+        h1 {
+            margin: 0;
+        }
+        .dashboard {
+            display: grid;
+            grid-template-columns: 2fr 1fr;
+            gap: 20px;
+        }
+        .video-container {
+            background-color: #222;
+            padding: 10px;
+            border-radius: 5px;
+            text-align: center;
+        }
+        video, img {
+            max-width: 100%;
+            border-radius: 3px;
+        }
+        .sidebar {
+            background-color: white;
+            padding: 15px;
+            border-radius: 5px;
+        }
+        .detections-list {
+            max-height: 500px;
+            overflow-y: auto;
+        }
+        .detection-item {
+            padding: 10px;
+            margin-bottom: 10px;
+            background-color: #f9f9f9;
+            border-left: 4px solid #007bff;
+            border-radius: 3px;
+        }
+        .detection-item:hover {
+            background-color: #e9e9e9;
+        }
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        .stat-card {
+            background-color: #007bff;
+            color: white;
+            padding: 15px;
+            border-radius: 5px;
+            text-align: center;
+        }
+        .stat-card h3 {
+            margin: 0;
+            font-size: 2em;
+        }
+        .stat-card p {
+            margin: 5px 0 0;
+            font-size: 0.9em;
+            opacity: 0.8;
+        }
+        .controls {
+            margin-top: 20px;
+            padding: 15px;
+            background-color: white;
+            border-radius: 5px;
+        }
+        button {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 8px 15px;
+            border-radius: 3px;
+            cursor: pointer;
+            margin-right: 10px;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        .settings {
+            margin-top: 10px;
+        }
+        .settings label {
+            display: block;
+            margin-bottom: 5px;
+        }
+        .settings input {
+            margin-bottom: 10px;
+            padding: 5px;
+            width: 100%;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Pi Aircraft Detector</h1>
+            <p>Visual "radar" system using 64MP ArduCam</p>
+        </header>
+        
+        <div class="dashboard">
+            <div class="video-container">
+                <img src="{{ url_for('video_feed') }}" alt="Live Aircraft Detection Feed">
+            </div>
+            
+            <div class="sidebar">
+                <div class="stats">
+                    <div class="stat-card">
+                        <h3 id="total-detections">0</h3>
+                        <p>Total Detections</p>
+                    </div>
+                    <div class="stat-card">
+                        <h3 id="active-tracks">0</h3>
+                        <p>Active Tracks</p>
+                    </div>
+                </div>
+                
+                <h2>Recent Detections</h2>
+                <div class="detections-list" id="detections-list">
+                    <!-- Detection items will be added here dynamically -->
+                </div>
+            </div>
+        </div>
+        
+        <div class="controls">
+            <h2>Controls</h2>
+            <button id="toggle-detection">Pause Detection</button>
+            <button id="save-snapshot">Save Snapshot</button>
+            <button id="clear-tracks">Clear Tracks</button>
+            
+            <div class="settings">
+                <h3>Detection Settings</h3>
+                <label for="min-area">Minimum Area:</label>
+                <input type="range" id="min-area" min="10" max="100" value="25">
+                
+                <label for="contrast-threshold">Contrast Threshold:</label>
+                <input type="range" id="contrast-threshold" min="20" max="100" value="50">
+                
+                <label for="confidence-threshold">Confidence Threshold:</label>
+                <input type="range" id="confidence-threshold" min="0.3" max="0.9" step="0.05" value="0.6">
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Update detection list periodically
+        function updateDetections() {
+            fetch('/detections')
+                .then(response => response.json())
+                .then(data => {
+                    const detectionsList = document.getElementById('detections-list');
+                    
+                    // Clear current list
+                    detectionsList.innerHTML = '';
+                    
+                    // Update total detections counter
+                    document.getElementById('total-detections').textContent = data.length;
+                    
+                    // Track unique active objects
+                    const activeObjects = new Set();
+                    
+                    // Add each detection to the list
+                    data.forEach(detection => {
+                        const detectionItem = document.createElement('div');
+                        detectionItem.className = 'detection-item';
+                        
+                        // Format timestamp
+                        const timestamp = new Date(detection.timestamp);
+                        const formattedTime = timestamp.toLocaleTimeString();
+                        
+                        detectionItem.innerHTML = `
+                            <strong>Time:</strong> ${formattedTime}<br>
+                            <strong>Position:</strong> (${detection.x}, ${detection.y})<br>
+                            <strong>Confidence:</strong> ${(detection.confidence * 100).toFixed(1)}%<br>
+                            <strong>Contrast:</strong> ${detection.contrast.toFixed(1)}
+                        `;
+                        
+                        // Track unique objects
+                        if (detection.tracking_id) {
+                            activeObjects.add(detection.tracking_id);
+                        }
+                        
+                        detectionsList.appendChild(detectionItem);
+                    });
+                    
+                    // Update active tracks counter
+                    document.getElementById('active-tracks').textContent = activeObjects.size;
+                })
+                .catch(error => console.error('Error fetching detections:', error));
+        }
+        
+        // Update detection list every 2 seconds
+        setInterval(updateDetections, 2000);
+        
+        // Initialize with first update
+        updateDetections();
+        
+        // Toggle detection button
+        document.getElementById('toggle-detection').addEventListener('click', function() {
+            const button = this;
+            
+            // Toggle detection state
+            fetch('/toggle_detection')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.active) {
+                        button.textContent = 'Pause Detection';
+                    } else {
+                        button.textContent = 'Resume Detection';
+                    }
+                })
+                .catch(error => console.error('Error toggling detection:', error));
+        });
+        
+        // Save snapshot button
+        document.getElementById('save-snapshot').addEventListener('click', function() {
+            fetch('/save_snapshot')
+                .then(response => response.json())
+                .then(data => {
+                    alert(`Snapshot saved as ${data.filename}`);
+                })
+                .catch(error => console.error('Error saving snapshot:', error));
+        });
+        
+        // Clear tracks button
+        document.getElementById('clear-tracks').addEventListener('click', function() {
+            fetch('/clear_tracks')
+                .then(response => response.json())
+                .then(data => {
+                    alert('Tracking data cleared');
+                    updateDetections();
+                })
+                .catch(error => console.error('Error clearing tracks:', error));
+        });
+        
+        // Update detection settings when sliders change
+        const updateSettings = function() {
+            const minArea = document.getElementById('min-area').value;
+            const contrastThreshold = document.getElementById('contrast-threshold').value;
+            const confidenceThreshold = document.getElementById('confidence-threshold').value;
+            
+            fetch('/update_settings', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    min_area: minArea,
+                    contrast_threshold: contrastThreshold,
+                    confidence_threshold: confidenceThreshold
+                })
+            })
+            .then(response => response.json())
+            .then(data => console.log('Settings updated:', data))
+            .catch(error => console.error('Error updating settings:', error));
+        };
+        
+        // Add event listeners to sliders
+        document.getElementById('min-area').addEventListener('change', updateSettings);
+        document.getElementById('contrast-threshold').addEventListener('change', updateSettings);
+        document.getElementById('confidence-threshold').addEventListener('change', updateSettings);
+    </script>
+</body>
+</html>
