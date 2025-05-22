@@ -37,8 +37,8 @@ from database import Database
 
 class WebInterface:
     """Web interface for the aircraft detection system"""
-    
-    def __init__(self, host='0.0.0.0', port=8080, snapshot_dir="snapshots"):
+
+    def __init__(self, host='0.0.0.0', port=8080, snapshot_dir="snapshots", camera=None):
         """
         Initialize the web interface
         
@@ -50,6 +50,7 @@ class WebInterface:
         self.host = host
         self.port = port
         self.snapshot_dir = snapshot_dir
+        self.camera = camera
         self.app = Flask(__name__)
         
         # Create snapshot directory if it doesn't exist
@@ -222,15 +223,16 @@ class WebInterface:
         def camera_info():
             """Get camera information"""
             try:
-                # This would typically get info from the camera in the main application
-                # For this example, we'll return placeholder info
-                info = {
-                    "model": "ArduCam 64MP Hawkeye",
-                    "resolution": "4624x3472",
-                    "framerate": "15 FPS",
-                    "autofocus": "Enabled"
-                }
-                
+                if self.camera and hasattr(self.camera, 'get_camera_info'):
+                    info = self.camera.get_camera_info()
+                else:
+                    info = {
+                        "model": "Unknown",
+                        "resolution": "N/A",
+                        "framerate": "N/A",
+                        "autofocus": "Unknown"
+                    }
+
                 return jsonify(info)
             except Exception as e:
                 logger.error(f"Error getting camera info: {e}")
