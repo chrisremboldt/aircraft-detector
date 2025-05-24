@@ -7,7 +7,7 @@ This module provides a simplified, reliable implementation for interfacing with 
 This version is specifically designed for Pi 5 with the modern libcamera/rpicam system.
 
 FIXES APPLIED:
-- Fixed --nopreview argument (removed invalid 'continuous' value)
+- Fixed --nopreview argument (now explicitly "1" to avoid misparsing)
 - Improved error handling for rpicam-still commands
 - Added fallback capture methods
 - Better logging for debugging
@@ -93,7 +93,7 @@ class ArduCam64MP:
             '--timeout', str(capture_timeout),
             '--quality', str(quality),
             '--immediate',  # Don't wait for focus/exposure stabilization
-            '--nopreview'   # FIXED: No value needed for --nopreview
+            '--nopreview', '1'  # Explicit value avoids CLI misparse
         ]
         
         # Set autofocus mode
@@ -208,7 +208,7 @@ class ArduCam64MP:
                     '--width', str(self.resolution[0]),
                     '--height', str(self.resolution[1]),
                     '--timeout', '2000',
-                    '--nopreview'
+                    '--nopreview', '1'
                 ]
                 
                 fallback_result = subprocess.run(fallback_cmd, capture_output=True, text=True, timeout=timeout)
@@ -320,9 +320,9 @@ class ArduCam64MP:
             subprocess.run([
                 'rpicam-still', '-o', '/dev/null',
                 '--autofocus-mode', 'auto',
-                '--timeout', '500', 
+                '--timeout', '500',
                 '--immediate',
-                '--nopreview'
+                '--nopreview', '1'
             ], capture_output=True, timeout=2)
             
             logger.debug("Background autofocus triggered")
@@ -349,7 +349,7 @@ class ArduCam64MP:
                 'rpicam-still', '-o', '/dev/null',
                 '--autofocus-mode', 'auto',
                 '--timeout', '3000',
-                '--nopreview'
+                '--nopreview', '1'
             ], capture_output=True, text=True, timeout=8)
             
             if result.returncode == 0:
@@ -452,7 +452,7 @@ class ArduCam64MP:
                 '--height', str(resolution[1]),
                 '--quality', '95',  # High quality for full-res photos
                 '--timeout', '5000',  # Longer timeout for high-res
-                '--nopreview'
+                '--nopreview', '1'
             ], capture_output=True, text=True, timeout=15)
             
             if result.returncode == 0 and os.path.exists(filename):
