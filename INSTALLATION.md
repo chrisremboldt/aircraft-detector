@@ -47,7 +47,7 @@ sudo apt upgrade -y
 
 ```bash
 # Install system dependencies
-sudo apt install -y python3-pip python3-opencv python3-numpy libatlas-base-dev libhdf5-dev libhdf5-serial-dev libopenjp2-7 libtiff5 libjasper-dev libavcodec-dev libavformat-dev libswscale-dev
+sudo apt install -y python3-pip python3-opencv python3-numpy libatlas-base-dev libhdf5-dev libopenjp2-7 libtiff-dev libjpeg-dev libavcodec-dev libavformat-dev libswscale-dev
 
 # Install Python packages
 pip3 install opencv-python-headless numpy Flask requests sqlalchemy pillow imutils
