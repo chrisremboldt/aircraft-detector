@@ -101,13 +101,17 @@ The system supports two camera integration options:
 The snippet below tests rpicam with OpenCV:
 
 ```python
-import subprocess, cv2
+python3 -c "
+import subprocess
+import cv2
+
 res = subprocess.run(['rpicam-still', '-o', '/tmp/test.jpg', '--timeout', '1000'], capture_output=True, text=True)
 if res.returncode == 0:
     img = cv2.imread('/tmp/test.jpg')
     print('SUCCESS:', img.shape if img is not None else 'Image capture failed')
 else:
     print('rpicam-still failed')
+"
 ```
 
 ## Setting Up the Aircraft Detection System
