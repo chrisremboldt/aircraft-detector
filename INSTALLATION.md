@@ -75,7 +75,7 @@ sudo make install
 cd ~
 
 # Clone the aircraft detection system repository
-git clone https://github.com/yourusername/aircraft-detector.git
+git clone https://github.com/chrisremboldt/aircraft-detector.git
 
 # Navigate to the project directory
 cd aircraft-detector
