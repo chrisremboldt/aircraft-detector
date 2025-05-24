@@ -434,6 +434,22 @@ def main():
     if not camera.initialize():
         logger.error("Failed to initialize camera. Exiting.")
         return
+
+    # Some Arducam libraries expose different focus control APIs.  Use
+    # manual focus when available but don't crash if the method is missing.
+    try:
+        if hasattr(camera, "set_manual_focus"):
+            logger.info("Setting camera to infinity focus for aircraft detection...")
+            camera.set_manual_focus(0.0)
+        else:
+            # Older libraries may only provide `set_autofocus`.  Disable
+            # autofocus to keep the lens fixed if possible.
+            focus_method = getattr(camera, "set_autofocus", None)
+            if callable(focus_method):
+                logger.info("Disabling autofocus (manual focus API not available)")
+                focus_method(False)
+    except Exception as e:
+        logger.warning(f"Focus control unavailable: {e}")
     
     # Initialize database
     db = Database(db_path)
