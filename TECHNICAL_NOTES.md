@@ -7,7 +7,7 @@ The aircraft detection system is built with the following components:
 ```
 +------------------+      +-------------------+      +------------------+
 |                  |      |                   |      |                  |
-|  64MP ArduCam    +----->+  Raspberry Pi 4   +----->+  Web Interface   |
+|  64MP ArduCam    +----->+  Raspberry Pi 5   +----->+  Web Interface   |
 |  with Autofocus  |      |  Processing Unit  |      |  (Optional)      |
 |                  |      |                  |      |                  |
 +------------------+      +---------+--------+      +------------------+
@@ -95,10 +95,10 @@ The code is designed to balance between capturing high-quality images and mainta
 
 ### Hardware Recommendations
 
-1. **Raspberry Pi 4 (8GB)**: Recommended for optimal performance
+1. **Raspberry Pi 5 (8GB)**: Recommended for optimal performance
 2. **Cooling**: Active cooling (fan) or heatsinks important during prolonged operation
 3. **Storage**: High-speed microSD (A2 class) or USB SSD for database storage
-4. **Power**: Stable 5V/3A power supply essential for reliable operation
+4. **Power**: Official 27W USB‑C power supply recommended for stable operation
 
 ### Software Optimizations
 
@@ -275,7 +275,7 @@ The SQLite database uses two primary tables:
 
 ## Performance Benchmarks
 
-Based on testing with Raspberry Pi 4 (8GB):
+Based on testing with Raspberry Pi 5 (8GB):
 
 | Resolution | Frame Rate | CPU Usage | Detection Range |
 |------------|------------|-----------|-----------------|
