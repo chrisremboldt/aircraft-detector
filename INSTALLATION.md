@@ -50,7 +50,7 @@ sudo apt upgrade -y
 sudo apt install -y python3-pip python3-opencv python3-numpy libatlas-base-dev libhdf5-dev libopenjp2-7 libtiff-dev libjpeg-dev libavcodec-dev libavformat-dev libswscale-dev
 
 # Install Python packages
-pip3 install opencv-python-headless numpy Flask requests sqlalchemy pillow imutils
+pip3 install --break-system-packages opencv-python-headless numpy Flask requests sqlalchemy pillow imutils
 
 # Install ArduCam dependencies
 sudo apt install -y build-essential cmake pkg-config libgphoto2-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev libopenblas-dev liblapacke-dev
