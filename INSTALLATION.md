@@ -1,110 +1,114 @@
 # Raspberry Pi Aircraft Detection System - Installation and Setup Guide
 
-This guide will walk you through setting up the aircraft detection system using a Raspberry Pi and the 64MP ArduCam with autofocus.
+This guide covers installing the aircraft detection system on a **Raspberry Pi 5** with the **64MP ArduCam Hawkeye** camera.
 
 ## Hardware Requirements
 
-1. **Raspberry Pi 4** (8GB RAM recommended for optimal performance)
+1. **Raspberry Pi 5** (8GB RAM recommended)
 2. **64MP ArduCam with autofocus** ([ArduCam 64MP Hawkeye](https://www.arducam.com/product/arducam-64mp-hawkeye-raspberry-pi-camera-autofocus/))
-3. **MicroSD card** (32GB or larger, Class 10)
-4. **Power supply** (Official Raspberry Pi power supply recommended)
-5. **Weatherproof enclosure** (if installing outdoors)
-6. **Tripod or mounting solution** for stable positioning
+3. **MicroSD card** (32GB+ Class 10)
+4. **Official Raspberry Pi 5 power supply** (27W USB‑C)
+5. **Weatherproof enclosure** if installing outdoors
+6. **Tripod or mounting solution**
 
 ## Software Setup
 
 ### 1. Operating System Installation
 
-1. Download and install the Raspberry Pi Imager from [raspberrypi.org](https://www.raspberrypi.org/software/)
-2. Insert your microSD card into your computer
-3. Launch Raspberry Pi Imager
-4. Choose "Raspberry Pi OS (64-bit)" with desktop
-5. Select your microSD card as the destination
-6. Click on the gear icon to access advanced options:
-   - Set hostname (e.g., `aircraft-detector`)
-   - Enable SSH
-   - Configure WiFi credentials
-   - Set username and password
-7. Click "WRITE" to flash the OS
-8. Insert the microSD card into your Raspberry Pi and power it on
+1. Install the Raspberry Pi Imager from [raspberrypi.org](https://www.raspberrypi.org/software/)
+2. Insert the microSD card
+3. Launch the imager and choose **"Raspberry Pi OS (64‑bit)"** with desktop (Bookworm or later)
+4. Select the card and open the gear icon to set advanced options (hostname, SSH, WiFi, user credentials)
+5. Click **WRITE** and then boot the Pi with the card inserted
 
 ### 2. Initial Configuration
 
-SSH into your Raspberry Pi:
+SSH into the Pi and update packages:
 
 ```bash
 ssh username@aircraft-detector.local
-```
-
-Update your system:
-
-```bash
 sudo apt update
 sudo apt upgrade -y
 ```
 
-### 3. Install Required Dependencies
+### 3. Hardware Connection
 
-```bash
-# Install system dependencies
-sudo apt install -y python3-pip python3-opencv python3-numpy libatlas-base-dev libhdf5-dev libopenjp2-7 libtiff-dev libjpeg-dev libavcodec-dev libavformat-dev libswscale-dev
+The ArduCam 64MP uses the 15‑pin connector. On the Pi 5 the two camera sockets are located between the Ethernet and HDMI ports. Connect the ribbon cable with the silver contacts facing the Ethernet port. Check your ArduCam board for the correct orientation (top-contact vs bottom-contact).
 
-# Install Python packages
-pip3 install --break-system-packages opencv-python-headless numpy Flask requests sqlalchemy pillow imutils
+### 4. Camera Configuration
 
-# Install ArduCam dependencies
-sudo apt install -y build-essential cmake pkg-config libgphoto2-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev libopenblas-dev liblapacke-dev
+Edit `/boot/firmware/config.txt` and add the following lines:
+
+```
+camera_auto_detect=0
+# ArduCam 64MP overlay - use cam0 on Pi 5
+dtoverlay=arducam-64mp,cam0
+dtparam=i2c_vc=on
+# GPU memory required for camera
+gpu_mem=128
 ```
 
-### 4. Install ArduCam SDK
-
-```bash
-# Clone the ArduCam repository
-git clone https://github.com/ArduCAM/MIPI_Camera.git
-
-# Install the SDK
-cd MIPI_Camera
-make clean && make -j4
-sudo make install
-```
-
-### 5. Download the Aircraft Detection System
-
-```bash
-# Navigate to home directory
-cd ~
-
-# Clone the aircraft detection system repository
-git clone https://github.com/chrisremboldt/aircraft-detector.git
-
-# Navigate to the project directory
-cd aircraft-detector
-```
-
-### 6. Configure the Camera
-
-Enable the camera interface:
-
-```bash
-sudo raspi-config
-```
-
-Navigate to "Interface Options" > "Camera" and enable it, then reboot:
+Reboot the Pi after saving the file:
 
 ```bash
 sudo reboot
 ```
 
-### 7. Test the Camera
+### 5. Install ArduCam Packages
 
-After rebooting, test that your 64MP ArduCam is working:
+Install the official ArduCam packages that provide the Pi 5 libcamera support:
 
 ```bash
-cd ~/MIPI_Camera/RPI
-python3 arducam_displayer.py
+wget -O install_pivariety_pkgs.sh https://github.com/ArduCAM/Arducam-Pivariety-V4L2-Driver/releases/download/install_script/install_pivariety_pkgs.sh
+chmod +x install_pivariety_pkgs.sh
+./install_pivariety_pkgs.sh -p libcamera_dev
+./install_pivariety_pkgs.sh -p libcamera_apps
 ```
 
-If successful, you should see the camera feed displayed.
+### 6. Verify Camera Installation
+
+List cameras and run a quick preview to make sure the ArduCam is detected:
+
+```bash
+rpicam-hello --list-cameras
+rpicam-hello --timeout 5000
+rpicam-still -o test.jpg --timeout 2000
+rpicam-vid -t 5000 -o test.h264
+```
+
+### 7. Install Required Dependencies
+
+```bash
+sudo apt install -y python3-pip python3-opencv python3-numpy python3-picamera2 libatlas-base-dev
+pip3 install --break-system-packages opencv-python-headless numpy Flask requests sqlalchemy pillow imutils
+```
+
+### 8. Download the Aircraft Detection System
+
+```bash
+cd ~
+git clone https://github.com/chrisremboldt/aircraft-detector.git
+cd aircraft-detector
+```
+
+## Camera Integration Methods
+
+The system supports two camera integration options:
+
+1. **rpicam-apps with subprocess** (recommended)
+2. **picamera2 library**
+
+The snippet below tests rpicam with OpenCV:
+
+```python
+import subprocess, cv2
+res = subprocess.run(['rpicam-still', '-o', '/tmp/test.jpg', '--timeout', '1000'], capture_output=True, text=True)
+if res.returncode == 0:
+    img = cv2.imread('/tmp/test.jpg')
+    print('SUCCESS:', img.shape if img is not None else 'Image capture failed')
+else:
+    print('rpicam-still failed')
+```
 
 ## Setting Up the Aircraft Detection System
 
@@ -113,12 +117,12 @@ If successful, you should see the camera feed displayed.
 ```bash
 mkdir -p ~/aircraft-detector/detections
 mkdir -p ~/aircraft-detector/templates
+mkdir -p ~/aircraft-detector/logs
 ```
 
 ### 2. Copy Code Files
 
-1. Copy the `pi-aircraft-detector.py` file to `~/aircraft-detector/`
-2. Copy the web interface template to `~/aircraft-detector/templates/index.html`
+Copy `pi-aircraft-detector.py` to `~/aircraft-detector/` and the web template to `~/aircraft-detector/templates/index.html`.
 
 ### 3. Make the Script Executable
 
@@ -128,13 +132,7 @@ chmod +x ~/aircraft-detector/pi-aircraft-detector.py
 
 ### 4. Configure to Run on Startup (Optional)
 
-Create a systemd service:
-
-```bash
-sudo nano /etc/systemd/system/aircraft-detector.service
-```
-
-Add the following content:
+Create `/etc/systemd/system/aircraft-detector.service` with:
 
 ```
 [Unit]
@@ -142,18 +140,19 @@ Description=Aircraft Detection System
 After=network.target
 
 [Service]
-ExecStart=/usr/bin/python3 /home/pi/aircraft-detector/pi-aircraft-detector.py --web
-WorkingDirectory=/home/pi/aircraft-detector
+ExecStart=/usr/bin/python3 /home/aircraft-detector/aircraft-detector/pi-aircraft-detector.py --web
+WorkingDirectory=/home/aircraft-detector/aircraft-detector
 StandardOutput=inherit
 StandardError=inherit
 Restart=always
-User=pi
+User=aircraft-detector
+Environment=PATH=/usr/bin:/usr/local/bin
 
 [Install]
 WantedBy=multi-user.target
 ```
 
-Enable and start the service:
+Enable the service:
 
 ```bash
 sudo systemctl enable aircraft-detector.service
@@ -162,143 +161,111 @@ sudo systemctl start aircraft-detector.service
 
 ## Running the System
 
-### Manual Start
+To start manually:
 
 ```bash
 cd ~/aircraft-detector
 python3 pi-aircraft-detector.py --web --display
 ```
 
-Command-line options:
-- `--display`: Show the detection feed on the Raspberry Pi's display
-- `--web`: Enable the web interface (accessible at http://aircraft-detector.local:8080)
-- `--web-port 8080`: Specify web interface port (default 8080)
-- `--save-detections`: Save images of detected aircraft
-- `--min-area 25`: Set minimum contour area (default 25)
-- `--contrast-threshold 50`: Set minimum contrast threshold (default 50)
-- `--confidence-threshold 0.6`: Set detection confidence threshold (default 0.6)
+Useful command-line options:
+- `--display` – show the detection feed locally
+- `--web` – enable the web interface (default port 8080)
+- `--web-port 8080` – specify a different port
+- `--save-detections` – store images of detections
+- `--resolution 1920x1080` – set camera resolution
+- `--fps 30` – set capture frame rate
+- `--autofocus` – enable autofocus for ArduCam
+- `--min-area 500` – minimum contour area
+- `--confidence-threshold 0.3` – detection confidence
 
-### Access the Web Interface
-
-Open a web browser and navigate to:
+Access the web interface at:
 ```
 http://aircraft-detector.local:8080
 ```
-
-## Mounting and Positioning
-
-For optimal detection:
-
-1. **Position**: Mount the camera with a clear view of the sky
-2. **Angle**: Aim slightly above the horizon for maximum range
-3. **Stability**: Ensure the camera is stable to reduce false positives from camera movement
-4. **Weather Protection**: Use a weatherproof enclosure if mounted outdoors
-5. **Power**: Consider a UPS (Uninterruptible Power Supply) for continuous operation
 
 ## Troubleshooting
 
 ### Camera Not Detected
 
 ```bash
-# Check if camera is detected
-vcgencmd get_camera
-
-# Check I2C devices
-i2cdetect -y 1
+rpicam-hello --list-cameras
 ```
+
+If no cameras are listed, check `/boot/firmware/config.txt` for the parameters above and verify the ribbon cable connection. You can also check I2C detection with:
+
+```bash
+sudo i2cdetect -y 10
+```
+
+A device should appear at address `1a`. Boot messages can be inspected with:
+
+```bash
+dmesg | grep -i "arducam\|camera"
+```
+
+### Common Configuration Issues
+
+1. Use `cam0` in the overlay on Pi 5
+2. Set `camera_auto_detect=0` to avoid conflicts
+3. Edit `/boot/firmware/config.txt` (not `/boot/config.txt`)
+4. Ensure `gpu_mem=128` or higher
 
 ### System Performance Issues
 
-If the system is running slowly:
-
-1. Reduce the resolution in the Camera class initialization
-2. Increase the minimum area threshold with `--min-area`
-3. Disable the web interface if not needed
-4. Consider overclocking your Raspberry Pi (advanced users only)
+Lower the resolution or frame rate if the Pi struggles, or disable the web interface.
 
 ### Web Interface Not Accessible
 
-1. Check if the service is running:
+Check the service status and firewall rules:
+
 ```bash
 sudo systemctl status aircraft-detector.service
-```
-
-2. Check firewall settings:
-```bash
 sudo ufw status
-sudo ufw allow 8080/tcp  # If using UFW firewall
+sudo ufw allow 8080/tcp
 ```
 
-## Customization
+## Pi 5 Specific Optimizations
 
-### Adjusting Detection Sensitivity
+- Consider increasing `gpu_mem` to 256 for smoother previews
+- Use active cooling; monitor temperature with `vcgencmd measure_temp`
 
-Edit the following parameters in `pi-aircraft-detector.py` or pass them as command-line arguments:
+## Camera Optimization for Aircraft Detection
 
-1. `min_area`: Minimum contour area to consider (higher = fewer false positives)
-2. `contrast_threshold`: Minimum contrast difference (higher = fewer false positives)
-3. `confidence_threshold`: Detection confidence threshold (higher = fewer false positives)
+- **High accuracy:** `--resolution 3840x2160`
+- **Balanced:** `--resolution 1920x1080` *(recommended)*
+- **Performance:** `--resolution 1280x720`
 
-### Sky Detection Customization
+Continuous autofocus can be enabled with:
 
-If the sky detection algorithm is not working well in your environment, you can adjust the HSV color thresholds in the `detect_sky` method:
-
-```python
-# Adjust these values based on your lighting conditions
-lower_blue = np.array([90, 30, 120])  # Hue, Saturation, Value
-upper_blue = np.array([140, 255, 255])
+```bash
+rpicam-still --autofocus-mode continuous
 ```
 
-## Advanced Features
+For manual focus at infinity:
 
-### Adding Notification System
-
-You can extend the system to send notifications when aircraft are detected:
-
-```python
-def send_notification(detection):
-    # Example using Pushover (install with pip install python-pushover)
-    from pushover import Client
-    
-    client = Client("YOUR_USER_KEY", api_token="YOUR_API_TOKEN")
-    client.send_message(f"Aircraft detected with confidence {detection['confidence']:.2f}", 
-                        title="Aircraft Detector")
+```bash
+rpicam-still --autofocus-mode manual --lens-position 0
 ```
 
-Add the function call in the main loop after recording a detection.
+## Mounting and Positioning
 
-### Integrating with Flight Data API
-
-You can enhance the system with flight data APIs like OpenSky Network:
-
-```python
-def get_nearby_aircraft():
-    import requests
-    
-    # Your location
-    latitude = 51.5074
-    longitude = -0.1278
-    
-    # Define a bounding box (10km radius)
-    response = requests.get(f"https://opensky-network.org/api/states/all?lamin={latitude-0.1}&lomin={longitude-0.1}&lamax={latitude+0.1}&lomax={longitude+0.1}")
-    
-    if response.status_code == 200:
-        data = response.json()
-        return data["states"]
-    else:
-        return []
-```
-
-## Maintenance
-
-1. **Regular Cleaning**: Keep the camera lens clean
-2. **Database Management**: Periodically backup/clear the SQLite database
-3. **Updates**: Keep the Raspberry Pi OS and packages updated
-4. **Log Rotation**: Implement log rotation to prevent filling up the SD card
+1. Mount with an unobstructed view of the sky (ideally 270°)
+2. Angle 15–30° above the horizon
+3. Use a rigid mount to avoid movement
+4. Use a weatherproof enclosure outdoors
+5. Consider a UPS for continuous power
 
 ## Additional Resources
 
-- [ArduCam Documentation](https://www.arducam.com/docs/raspberry-pi-camera/)
+- [ArduCam Pi 5 Documentation](https://docs.arducam.com/Raspberry-Pi-Camera/Native-camera/64MP-Hawkeye/)
+- [Raspberry Pi 5 Camera Guide](https://www.raspberrypi.org/documentation/accessories/camera.html)
+- [libcamera/rpicam-apps Documentation](https://www.raspberrypi.org/documentation/computers/camera_software.html)
 - [OpenCV Documentation](https://docs.opencv.org/4.x/)
-- [Raspberry Pi Documentation](https://www.raspberrypi.org/documentation/)
-- [Flask Documentation](https://flask.palletsprojects.com/)
+
+## Version Compatibility
+
+- **Raspberry Pi OS:** Bookworm (2023‑12‑05) or later
+- **Python:** 3.11+
+- **OpenCV:** 4.5.1+
+- **libcamera:** 0.5.0+

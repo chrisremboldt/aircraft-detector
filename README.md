@@ -15,9 +15,9 @@ Pi-based system for tracking aircraft using a 64MP ArduCam and OpenCV. The proje
 
 Refer to [INSTALLATION.md](INSTALLATION.md) for a detailed setup guide. In short you will need:
 
-1. Raspberry Pi 4 (8&nbsp;GB recommended)
+1. Raspberry Pi 5 (8&nbsp;GB recommended)
 2. 64MP ArduCam Hawkeye with autofocus
-3. MicroSD card and stable power supply
+3. MicroSD card (32&nbsp;GB or larger) and the official 27W USB‑C power supply
 
 ## Quick Start
 
