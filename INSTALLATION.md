@@ -67,23 +67,154 @@ chmod +x install_pivariety_pkgs.sh
 
 ### 6. Verify Camera Installation
 
-List cameras and run a quick preview to make sure the ArduCam is detected:
+Before proceeding with the aircraft detection system, verify your camera is working correctly using the provided test scripts.
+
+#### Camera Test Script
+
+Run the comprehensive camera test to verify all functionality:
 
 ```bash
-rpicam-hello --list-cameras
-rpicam-hello --timeout 5000
-rpicam-still -o test.jpg --timeout 2000
-rpicam-vid -t 5000 -o test.h264
+# Basic test (quick verification)
+python3 test_camera.py --quick
+
+# Full test with image saving
+python3 test_camera.py --save-images
+
+# View test results
+python3 test_camera.py --help
 ```
 
-### 7. Install Required Dependencies
+The test script will check:
+
+- System requirements (rpicam-apps installation)
+- Camera detection by libcamera
+- Configuration file settings
+- Basic image capture
+- Autofocus functionality
+- High-resolution capture
+- Video recording capability
+- Python module integration
+
+Expected Output:
+```
+🚀 ArduCam 64MP Test Script
+==================================================
+🔍 Checking system requirements...
+  ✅ rpicam-apps package - OK
+  ✅ rpicam-still command - OK
+
+📷 Checking camera detection...
+  ✅ ArduCam 64MP detected
+
+📸 Testing basic camera capture...
+  ✅ Basic capture successful: (1080, 1920, 3)
+
+📊 TEST SUMMARY
+==================================================
+Basic Capture        : ✅ PASS
+Autofocus            : ✅ PASS
+High Resolution      : ✅ PASS
+Video Recording      : ✅ PASS
+
+🎉 ALL TESTS PASSED!
+Your ArduCam 64MP is ready for aircraft detection!
+```
+
+#### Configuration Validator
+
+If the camera test fails, use the configuration validator to check and fix your setup:
+
+```bash
+# Check configuration only
+python3 validate_config.py
+
+# Check and automatically fix issues (requires sudo)
+sudo python3 validate_config.py --fix --backup
+```
+
+The validator will:
+
+- Verify Pi 5 device tree settings
+- Check for configuration conflicts
+- Validate required parameters
+- Optionally fix issues automatically
+- Create backups before making changes
+
+Sample Fix Output:
+```
+🔧 ArduCam 64MP Configuration Validator
+==================================================
+✅ Detected: Raspberry Pi 5 Model B Rev 1.0
+
+🔍 Validating configuration...
+  ✅ camera_auto_detect: 0
+  ⚠️  dtoverlay: arducam-64mp,cam1 (expected: arducam-64mp,cam0)
+  ✅ gpu_mem: 128
+
+🔧 Applying 1 fixes...
+✅ Configuration updated successfully
+
+🚀 NEXT STEPS
+==================================================
+1. Reboot your Raspberry Pi:
+   sudo reboot
+2. After reboot, test the camera:
+   python3 test_camera.py
+```
+
+#### Troubleshooting Common Issues
+
+If tests fail, the scripts provide specific troubleshooting guidance:
+
+**"No cameras available" Error:**
+
+```bash
+# Check configuration
+python3 validate_config.py
+
+# Common fixes:
+# 1. Ensure camera_auto_detect=0
+# 2. Use cam0 not cam1 for Pi 5
+# 3. Check cable connection
+# 4. Reboot after config changes
+```
+
+**"Pipeline handler in use" Error:**
+
+```bash
+# Kill any conflicting processes
+sudo pkill -f rpicam
+
+# Restart aircraft detector
+python3 pi-aircraft-detector.py --web
+```
+
+### 7. Test Camera Integration
+
+Once the camera tests pass, verify integration with the aircraft detection system:
+
+```bash
+# Test the camera module directly
+python3 -c "
+from arducam_camera import ArduCam64MP
+camera = ArduCam64MP(resolution=(1920, 1080))
+if camera.initialize():
+    frame = camera.capture_frame()
+    print(f'SUCCESS: {frame.shape}' if frame is not None else 'FAILED')
+    camera.release()
+"
+```
+
+Expected output: SUCCESS: (1080, 1920, 3)
+
+### 8. Install Required Dependencies
 
 ```bash
 sudo apt install -y python3-pip python3-opencv python3-numpy python3-picamera2 libatlas-base-dev
 pip3 install --break-system-packages opencv-python-headless numpy Flask requests sqlalchemy pillow imutils
 ```
 
-### 8. Download the Aircraft Detection System
+### 9. Download the Aircraft Detection System
 
 ```bash
 cd ~

@@ -21,16 +21,55 @@ Refer to [INSTALLATION.md](INSTALLATION.md) for a detailed setup guide. In short
 
 ## Quick Start
 
-1. Clone this repository on your Raspberry Pi and install the dependencies listed in [INSTALLATION.md](INSTALLATION.md).
-2. Run the detector with video display and the web interface enabled:
+1. **Verify Hardware Setup**: Follow [INSTALLATION.md](INSTALLATION.md) for Pi 5 + ArduCam configuration
+
+2. **Test Camera**: Verify your setup before running the detector
+   ```bash
+   python3 test_camera.py --quick
+   ```
+
+   Fix Configuration (if needed):
+   ```bash
+   sudo python3 validate_config.py --fix --backup
+   sudo reboot
+   ```
+
+3. **Run Aircraft Detector**:
+   ```bash
+   python3 pi-aircraft-detector.py --web --save-detections
+   ```
+
+4. **Access Web Interface**: Open `http://<pi-address>:8080`
+
+### Troubleshooting
+
+If you encounter issues:
+
+- Run diagnostics: `python3 test_camera.py`
+- Check configuration: `python3 validate_config.py`
+- View logs: Check console output for specific error messages
+- Hardware check: Verify camera cable and connections
+
+For detailed troubleshooting, see [INSTALLATION.md](INSTALLATION.md).
+
+### Command Summary for Users
+
+After cloning the repository, run:
 
 ```bash
-python3 pi-aircraft-detector.py --display --web
+# 1. Test camera setup
+python3 test_camera.py
+
+# 2. Fix any configuration issues
+sudo python3 validate_config.py --fix --backup
+sudo reboot
+
+# 3. Test again after reboot
+python3 test_camera.py --quick
+
+# 4. Run aircraft detector
+python3 pi-aircraft-detector.py --web
 ```
-
-3. Open a browser to `http://<pi-address>:8080` to view the dashboard.
-
-Use `--help` to see all available options.
 
 ## Project Structure
 
