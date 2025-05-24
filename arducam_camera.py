@@ -1,17 +1,17 @@
 #!/usr/bin/env python3
 """
-ArduCam 64MP Hawkeye Camera Integration for Raspberry Pi
+ArduCam 64MP Hawkeye Camera Integration for Raspberry Pi 5
 
 This module provides the specific implementation for interfacing with the
-64MP ArduCam Hawkeye camera with autofocus capabilities. This code replaces
-the generic Camera class in the main aircraft detection system.
+64MP ArduCam Hawkeye camera with autofocus capabilities using rpicam-apps.
+This version is updated for Pi 5 with the modern libcamera/rpicam system.
 
 Requirements:
-- ArduCam Python SDK installed (from MIPI_Camera repository)
-- libcamera-dev and libcamera-apps installed
+- rpicam-apps installed and working
+- ArduCam 64MP properly configured with device tree overlay
 
 Note: This module is designed specifically for the 64MP ArduCam Hawkeye camera
-and should be integrated with the main aircraft detection system.
+on Raspberry Pi 5 and integrates with the main aircraft detection system.
 """
 
 import cv2
@@ -20,7 +20,9 @@ import time
 import os
 import logging
 import threading
-from arducam_camera import ArduCam
+import subprocess
+import tempfile
+from datetime import datetime
 
 # Configure logging
 logging.basicConfig(
@@ -30,171 +32,263 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 class ArduCam64MP:
-    """Interface for the 64MP ArduCam Hawkeye with autofocus"""
+    """Interface for the 64MP ArduCam Hawkeye with autofocus using rpicam-apps"""
     
     def __init__(self, 
-                 resolution=(4624, 3472),  # Native resolution of 64MP ArduCam
-                 framerate=15,
-                 config_file="/home/pi/MIPI_Camera/RPI/config/camera_config.json",
-                 processing_resolution=(1920, 1080)):  # Lower resolution for processing
+                 resolution=(1920, 1080),  # Processing resolution
+                 framerate=30,
+                 autofocus=True,
+                 capture_timeout=1000):  # Timeout for rpicam commands
         """
-        Initialize the ArduCam camera
+        Initialize the ArduCam camera using rpicam-apps
         
         Args:
-            resolution: Native capture resolution (tuple of width, height)
+            resolution: Processing resolution (tuple of width, height)
             framerate: Target framerate
-            config_file: Path to ArduCam config file
-            processing_resolution: Resolution for image processing (downsampled)
+            autofocus: Enable autofocus mode
+            capture_timeout: Timeout for rpicam commands in milliseconds
         """
-        self.native_resolution = resolution
-        self.processing_resolution = processing_resolution
+        self.resolution = resolution
         self.framerate = framerate
-        self.config_file = config_file
-        self.camera = None
+        self.autofocus = autofocus
+        self.capture_timeout = capture_timeout
         self.frame_buffer = None
         self.capture_thread = None
         self.running = False
         self.last_autofocus_time = 0
-        self.autofocus_interval = 60  # Seconds between autofocus operations
+        self.autofocus_interval = 30  # Seconds between autofocus operations
+        self.temp_dir = tempfile.gettempdir()
+        self.frame_counter = 0
+        
+        # rpicam command base arguments
+        self.base_args = [
+            '--width', str(resolution[0]),
+            '--height', str(resolution[1]),
+            '--timeout', str(capture_timeout),
+            '--immediate',  # Don't wait for focus/exposure
+            '--nopreview'   # No preview window
+        ]
+        
+        if autofocus:
+            self.base_args.extend(['--autofocus-mode', 'continuous'])
         
     def initialize(self):
         """Initialize the camera hardware"""
         try:
-            # Initialize ArduCam with config file
-            if not os.path.exists(self.config_file):
-                logger.error(f"Config file not found: {self.config_file}")
+            # Test if rpicam-hello can detect camera
+            result = subprocess.run(['rpicam-hello', '--list-cameras'], 
+                                  capture_output=True, text=True, timeout=10)
+            
+            if result.returncode != 0:
+                logger.error("rpicam-hello failed - camera not detected")
                 return False
                 
-            # Initialize ArduCam with configuration
-            self.camera = ArduCam()
-            self.camera.init_camera(self.config_file)
+            if "arducam_64mp" not in result.stdout:
+                logger.error("ArduCam 64MP not detected in camera list")
+                return False
+                
+            logger.info("ArduCam 64MP detected successfully")
             
-            # Configure camera
-            self.camera.set_resolution(*self.native_resolution)
-            self.camera.set_control(ArduCam.CTRL_FRAME_RATE, self.framerate)
+            # Test initial capture
+            test_file = os.path.join(self.temp_dir, "arducam_init_test.jpg")
+            test_result = subprocess.run([
+                'rpicam-still', '-o', test_file,
+                '--width', str(self.resolution[0]),
+                '--height', str(self.resolution[1]),
+                '--timeout', '2000'
+            ], capture_output=True, text=True, timeout=15)
             
-            # Initialize frame buffer
-            self.frame_buffer = None
+            if test_result.returncode == 0 and os.path.exists(test_file):
+                # Test reading with OpenCV
+                test_img = cv2.imread(test_file)
+                if test_img is not None:
+                    logger.info(f"Camera initialization successful - test image: {test_img.shape}")
+                    os.remove(test_file)
+                else:
+                    logger.error("Failed to read test image with OpenCV")
+                    return False
+            else:
+                logger.error(f"Initial capture test failed: {test_result.stderr}")
+                return False
             
-            # Start capture thread
+            # Start continuous capture thread for video-like operation
             self.running = True
             self.capture_thread = threading.Thread(target=self._capture_loop)
             self.capture_thread.daemon = True
             self.capture_thread.start()
             
-            # Allow camera to initialize
-            time.sleep(2)
-            
-            # Initial autofocus
-            self.autofocus()
-            
-            logger.info(f"64MP ArduCam initialized at resolution {self.native_resolution}")
+            logger.info(f"ArduCam 64MP initialized at {self.resolution[0]}x{self.resolution[1]}")
             return True
+            
+        except subprocess.TimeoutExpired:
+            logger.error("Camera initialization timed out")
+            return False
         except Exception as e:
-            logger.error(f"Failed to initialize 64MP ArduCam: {e}")
+            logger.error(f"Failed to initialize ArduCam 64MP: {e}")
             return False
             
     def release(self):
         """Release the camera resources"""
         self.running = False
         if self.capture_thread:
-            self.capture_thread.join(timeout=1.0)
+            self.capture_thread.join(timeout=2.0)
             
-        if self.camera:
-            self.camera.close_camera()
-            logger.info("64MP ArduCam resources released")
+        # Clean up any temporary files
+        try:
+            for filename in os.listdir(self.temp_dir):
+                if filename.startswith("arducam_frame_"):
+                    os.remove(os.path.join(self.temp_dir, filename))
+        except:
+            pass
+            
+        logger.info("ArduCam 64MP resources released")
             
     def _capture_loop(self):
         """Background thread to continuously capture frames"""
+        frame_count = 0
+        
         while self.running:
             try:
-                # Capture frame
-                frame = self.camera.capture_frame()
-                if frame is not None:
-                    # Convert to OpenCV format
-                    frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
+                # Generate unique filename for this frame
+                frame_file = os.path.join(self.temp_dir, f"arducam_frame_{frame_count % 3}.jpg")
+                
+                # Capture frame using rpicam-still
+                result = subprocess.run([
+                    'rpicam-still', '-o', frame_file
+                ] + self.base_args, capture_output=True, text=True, timeout=5)
+                
+                if result.returncode == 0 and os.path.exists(frame_file):
+                    # Read frame with OpenCV
+                    frame = cv2.imread(frame_file)
+                    if frame is not None:
+                        self.frame_buffer = frame
+                        self.frame_counter += 1
+                        
+                        # Check if autofocus should run
+                        if self.autofocus:
+                            current_time = time.time()
+                            if current_time - self.last_autofocus_time > self.autofocus_interval:
+                                self._trigger_autofocus()
+                                self.last_autofocus_time = current_time
                     
-                    # Resize for processing
-                    if self.processing_resolution != self.native_resolution:
-                        frame = cv2.resize(frame, self.processing_resolution)
+                    # Clean up frame file
+                    try:
+                        os.remove(frame_file)
+                    except:
+                        pass
+                else:
+                    logger.warning(f"Frame capture failed: {result.stderr}")
                     
-                    # Update frame buffer
-                    self.frame_buffer = frame
-                    
-                    # Check if autofocus should run
-                    current_time = time.time()
-                    if current_time - self.last_autofocus_time > self.autofocus_interval:
-                        self.autofocus()
-                        self.last_autofocus_time = current_time
+                frame_count += 1
+                
+                # Control frame rate
+                time.sleep(1.0 / self.framerate)
+                
+            except subprocess.TimeoutExpired:
+                logger.warning("Frame capture timed out")
+                time.sleep(0.1)
             except Exception as e:
                 logger.error(f"Error in capture loop: {e}")
                 time.sleep(0.1)
                 
     def capture_frame(self):
         """Capture a frame from the camera"""
-        if not self.camera:
-            logger.error("64MP ArduCam not initialized")
+        if not self.running:
+            logger.error("Camera not initialized or stopped")
             return None
             
         # Return the most recent frame from the buffer
-        return self.frame_buffer.copy() if self.frame_buffer is not None else None
+        if self.frame_buffer is not None:
+            return self.frame_buffer.copy()
+        else:
+            # If no buffered frame, capture directly
+            return self._capture_single_frame()
+            
+    def _capture_single_frame(self):
+        """Capture a single frame directly (blocking)"""
+        try:
+            frame_file = os.path.join(self.temp_dir, f"arducam_single_{int(time.time())}.jpg")
+            
+            result = subprocess.run([
+                'rpicam-still', '-o', frame_file
+            ] + self.base_args, capture_output=True, text=True, timeout=5)
+            
+            if result.returncode == 0 and os.path.exists(frame_file):
+                frame = cv2.imread(frame_file)
+                os.remove(frame_file)
+                return frame
+            else:
+                logger.error(f"Single frame capture failed: {result.stderr}")
+                return None
+                
+        except Exception as e:
+            logger.error(f"Error capturing single frame: {e}")
+            return None
+            
+    def _trigger_autofocus(self):
+        """Trigger autofocus operation"""
+        try:
+            # Use rpicam-still with autofocus trigger
+            result = subprocess.run([
+                'rpicam-still', '-o', '/dev/null',
+                '--autofocus-mode', 'auto',
+                '--timeout', '1000'
+            ], capture_output=True, text=True, timeout=3)
+            
+            if result.returncode == 0:
+                logger.debug("Autofocus triggered successfully")
+            else:
+                logger.warning(f"Autofocus trigger failed: {result.stderr}")
+                
+        except Exception as e:
+            logger.warning(f"Error triggering autofocus: {e}")
             
     def autofocus(self):
-        """Run autofocus operation"""
+        """Run manual autofocus operation"""
         try:
-            if not self.camera:
-                logger.error("Camera not initialized")
+            logger.info("Running manual autofocus...")
+            
+            result = subprocess.run([
+                'rpicam-still', '-o', '/dev/null',
+                '--autofocus-mode', 'auto',
+                '--timeout', '2000'
+            ], capture_output=True, text=True, timeout=5)
+            
+            if result.returncode == 0:
+                logger.info("Manual autofocus completed successfully")
+                return True
+            else:
+                logger.error(f"Manual autofocus failed: {result.stderr}")
                 return False
                 
-            logger.info("Running autofocus...")
-            
-            # Start autofocus operation
-            self.camera.start_autofocus()
-            
-            # Wait for autofocus to complete
-            # This can be improved with a callback mechanism if ArduCam SDK supports it
-            time.sleep(2)
-            
-            logger.info("Autofocus completed")
-            return True
         except Exception as e:
-            logger.error(f"Autofocus failed: {e}")
+            logger.error(f"Manual autofocus error: {e}")
             return False
             
     def set_autofocus(self, enable=True):
         """Enable or disable autofocus"""
-        try:
-            if not self.camera:
-                logger.error("Camera not initialized")
-                return False
-                
-            if enable:
-                # Enable continuous autofocus
-                self.camera.set_control(ArduCam.CTRL_AF_MODE, ArduCam.AF_MODE_CONTINUOUS)
-                logger.info("Continuous autofocus enabled")
-            else:
-                # Disable continuous autofocus
-                self.camera.set_control(ArduCam.CTRL_AF_MODE, ArduCam.AF_MODE_OFF)
-                logger.info("Autofocus disabled")
-                
-            return True
-        except Exception as e:
-            logger.error(f"Failed to set autofocus mode: {e}")
-            return False
+        self.autofocus = enable
+        if enable:
+            self.base_args = [arg for arg in self.base_args if not arg.startswith('--autofocus-mode')]
+            self.base_args.extend(['--autofocus-mode', 'continuous'])
+            logger.info("Continuous autofocus enabled")
+        else:
+            self.base_args = [arg for arg in self.base_args if not arg.startswith('--autofocus-mode')]
+            self.base_args.extend(['--autofocus-mode', 'manual'])
+            logger.info("Autofocus disabled")
+        return True
             
     def set_manual_focus(self, focus_value):
-        """Set manual focus value (0-255)"""
+        """Set manual focus value (0.0-1.0 where 0.0 is infinity)"""
         try:
-            if not self.camera:
-                logger.error("Camera not initialized")
-                return False
-                
-            # Set focus to manual mode
-            self.camera.set_control(ArduCam.CTRL_AF_MODE, ArduCam.AF_MODE_OFF)
+            # Remove existing lens-position arguments
+            self.base_args = [arg for arg in self.base_args if not arg.startswith('--lens-position')]
             
-            # Set focus value
-            focus_value = max(0, min(255, focus_value))
-            self.camera.set_control(ArduCam.CTRL_FOCUS_ABSOLUTE, focus_value)
+            # Add manual focus
+            focus_value = max(0.0, min(1.0, focus_value))
+            self.base_args.extend(['--lens-position', str(focus_value)])
+            self.base_args = [arg for arg in self.base_args if not arg.startswith('--autofocus-mode')]
+            self.base_args.extend(['--autofocus-mode', 'manual'])
             
             logger.info(f"Manual focus set to {focus_value}")
             return True
@@ -205,23 +299,23 @@ class ArduCam64MP:
     def adjust_exposure(self, sky_brightness):
         """Adjust camera exposure based on sky brightness"""
         try:
-            if not self.camera:
-                logger.error("Camera not initialized")
-                return False
-                
-            # Calculate exposure value based on sky brightness
-            # This is an example formula that should be tuned based on testing
-            if sky_brightness < 50:  # Dark sky
-                exposure_value = 200  # Longer exposure
-            elif sky_brightness < 150:  # Normal sky
-                exposure_value = 100  # Medium exposure
-            else:  # Bright sky
-                exposure_value = 50  # Shorter exposure
-                
-            # Set exposure value
-            self.camera.set_control(ArduCam.CTRL_EXPOSURE, exposure_value)
+            # Remove existing exposure arguments
+            args_to_remove = ['--shutter', '--gain', '--ev']
+            for arg in args_to_remove:
+                self.base_args = [a for a in self.base_args if not a.startswith(arg)]
             
-            logger.info(f"Adjusted exposure to {exposure_value} for sky brightness: {sky_brightness}")
+            # Calculate exposure settings based on sky brightness
+            if sky_brightness < 50:  # Dark sky
+                # Longer exposure for dark conditions
+                self.base_args.extend(['--shutter', '100000', '--gain', '2.0'])  # 100ms shutter
+            elif sky_brightness < 150:  # Normal sky
+                # Auto exposure
+                pass  # Let camera auto-adjust
+            else:  # Bright sky
+                # Shorter exposure for bright conditions
+                self.base_args.extend(['--shutter', '10000', '--gain', '1.0'])  # 10ms shutter
+                
+            logger.info(f"Adjusted exposure for sky brightness: {sky_brightness}")
             return True
         except Exception as e:
             logger.error(f"Failed to adjust exposure: {e}")
@@ -230,44 +324,45 @@ class ArduCam64MP:
     def take_high_res_photo(self, filename):
         """Take a full resolution photo and save it to disk"""
         try:
-            if not self.camera:
-                logger.error("Camera not initialized")
+            # Use maximum resolution for high-res photo
+            result = subprocess.run([
+                'rpicam-still', '-o', filename,
+                '--width', '8000',
+                '--height', '6000',
+                '--timeout', '3000'
+            ] + [arg for arg in self.base_args if not arg.startswith('--width') and not arg.startswith('--height')],
+            capture_output=True, text=True, timeout=10)
+            
+            if result.returncode == 0 and os.path.exists(filename):
+                logger.info(f"High-resolution photo saved to {filename}")
+                return True
+            else:
+                logger.error(f"Failed to take high-res photo: {result.stderr}")
                 return False
                 
-            # Temporarily switch to full resolution
-            current_resolution = self.processing_resolution
-            
-            # Capture high-resolution frame
-            frame = self.camera.capture_frame()
-            if frame is None:
-                logger.error("Failed to capture high-res frame")
-                return False
-                
-            # Convert to OpenCV format
-            frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
-            
-            # Save image
-            cv2.imwrite(filename, frame)
-            
-            logger.info(f"High-resolution photo saved to {filename}")
-            return True
         except Exception as e:
-            logger.error(f"Failed to take high-res photo: {e}")
+            logger.error(f"Error taking high-res photo: {e}")
             return False
             
     def set_zoom(self, zoom_factor):
         """Set digital zoom factor (1.0-5.0)"""
         try:
-            if not self.camera:
-                logger.error("Camera not initialized")
-                return False
-                
+            # Remove existing zoom arguments
+            self.base_args = [arg for arg in self.base_args if not arg.startswith('--roi')]
+            
             # Ensure zoom factor is within valid range
             zoom_factor = max(1.0, min(5.0, zoom_factor))
             
-            # Set digital zoom
-            self.camera.set_control(ArduCam.CTRL_ZOOM_ABSOLUTE, int(zoom_factor * 100))
-            
+            if zoom_factor > 1.0:
+                # Calculate ROI for digital zoom
+                # Center crop with zoom factor
+                crop_factor = 1.0 / zoom_factor
+                x_offset = (1.0 - crop_factor) / 2.0
+                y_offset = (1.0 - crop_factor) / 2.0
+                
+                roi = f"{x_offset},{y_offset},{crop_factor},{crop_factor}"
+                self.base_args.extend(['--roi', roi])
+                
             logger.info(f"Digital zoom set to {zoom_factor}x")
             return True
         except Exception as e:
@@ -277,59 +372,75 @@ class ArduCam64MP:
     def get_camera_info(self):
         """Get camera information"""
         try:
-            if not self.camera:
-                logger.error("Camera not initialized")
-                return {}
-                
-            # Get camera information
+            # Get camera list
+            result = subprocess.run(['rpicam-hello', '--list-cameras'], 
+                                  capture_output=True, text=True, timeout=5)
+            
             info = {
                 "model": "ArduCam 64MP Hawkeye",
-                "resolution": self.native_resolution,
-                "processing_resolution": self.processing_resolution,
+                "resolution": self.resolution,
                 "framerate": self.framerate,
+                "autofocus": self.autofocus,
+                "frames_captured": self.frame_counter,
+                "camera_detected": "arducam_64mp" in result.stdout if result.returncode == 0 else False
             }
             
             return info
         except Exception as e:
             logger.error(f"Failed to get camera info: {e}")
-            return {}
+            return {"error": str(e)}
 
 def test_arducam():
     """Test the ArduCam 64MP camera"""
     try:
+        print("Testing ArduCam 64MP with rpicam-apps...")
+        
         # Initialize camera
-        camera = ArduCam64MP(processing_resolution=(1920, 1080))
+        camera = ArduCam64MP(resolution=(1920, 1080), framerate=15)
         if not camera.initialize():
             print("Failed to initialize camera. Exiting.")
             return False
             
         print("Camera initialized successfully")
         
-        # Wait for camera to initialize
-        time.sleep(2)
+        # Wait for camera to stabilize
+        time.sleep(3)
         
         # Capture test frames
-        for i in range(10):
+        for i in range(5):
+            print(f"Capturing frame {i+1}...")
             frame = camera.capture_frame()
             if frame is not None:
                 print(f"Frame {i+1} captured: {frame.shape}")
                 
                 # Save a test image
-                if i == 5:
-                    cv2.imwrite("arducam_test.jpg", frame)
-                    print("Test image saved as arducam_test.jpg")
+                if i == 2:
+                    test_filename = f"arducam_test_{int(time.time())}.jpg"
+                    cv2.imwrite(test_filename, frame)
+                    print(f"Test image saved as {test_filename}")
             else:
                 print(f"Frame {i+1} capture failed")
                 
-            time.sleep(0.5)
+            time.sleep(1)
             
         # Test autofocus
         print("Testing autofocus...")
-        camera.autofocus()
+        if camera.autofocus():
+            print("Autofocus test successful")
+        else:
+            print("Autofocus test failed")
         
         # Test high-res photo
         print("Taking high-resolution photo...")
-        camera.take_high_res_photo("arducam_highres.jpg")
+        highres_filename = f"arducam_highres_{int(time.time())}.jpg"
+        if camera.take_high_res_photo(highres_filename):
+            print(f"High-res photo saved as {highres_filename}")
+        else:
+            print("High-res photo failed")
+        
+        # Get camera info
+        info = camera.get_camera_info()
+        print(f"Camera info: {info}")
         
         # Release camera
         camera.release()
