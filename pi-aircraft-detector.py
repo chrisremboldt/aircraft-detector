@@ -34,6 +34,8 @@ import logging
 from flask import Flask, Response, render_template
 import json
 import math
+import requests
+from datetime import datetime
 
 from rpi_camera import RPiCamera as Camera
 from database import Database
@@ -54,6 +56,78 @@ detected_aircraft = []
 current_frame = None
 detection_active = False
 db_path = "aircraft_detections.db"
+
+class ADSBIntegration:
+    def __init__(self, adsb_url="http://localhost:8080/data/aircraft.json"):
+        self.adsb_url = adsb_url
+        self.camera_lat = None
+        self.camera_lon = None
+
+    def get_nearby_aircraft(self, max_distance_nm=50):
+        try:
+            response = requests.get(self.adsb_url, timeout=3)
+            if response.status_code == 200:
+                data = response.json()
+                aircraft_list = data.get('aircraft', [])
+                filtered = []
+                for ac in aircraft_list:
+                    if self._is_valid_aircraft(ac, max_distance_nm):
+                        filtered.append(self._format_aircraft_data(ac))
+                return filtered
+        except Exception as e:
+            print(f"ADS-B API error: {e}")
+        return []
+
+    def _is_valid_aircraft(self, aircraft, max_distance_nm):
+        if aircraft.get('seen_pos', 999) > 60:
+            return False
+        if not aircraft.get('alt_baro') or aircraft.get('alt_baro') < 500:
+            return False
+        if self.camera_lat and self.camera_lon and 'lat' in aircraft and 'lon' in aircraft:
+            distance = self._calculate_distance(self.camera_lat, self.camera_lon,
+                                               aircraft['lat'], aircraft['lon'])
+            if distance > max_distance_nm:
+                return False
+        return True
+
+    def _format_aircraft_data(self, aircraft):
+        return {
+            'icao': aircraft.get('hex', '').upper(),
+            'callsign': aircraft.get('flight', '').strip(),
+            'altitude': aircraft.get('alt_baro'),
+            'ground_speed': aircraft.get('gs'),
+            'track': aircraft.get('track'),
+            'latitude': aircraft.get('lat'),
+            'longitude': aircraft.get('lon'),
+            'vertical_rate': aircraft.get('baro_rate'),
+            'squawk': aircraft.get('squawk'),
+            'last_seen': aircraft.get('seen', 0),
+            'last_position': aircraft.get('seen_pos', 0)
+        }
+
+    def _calculate_distance(self, lat1, lon1, lat2, lon2):
+        R = 3440.065
+        lat1_rad = math.radians(lat1)
+        lat2_rad = math.radians(lat2)
+        delta_lat = math.radians(lat2 - lat1)
+        delta_lon = math.radians(lon2 - lon1)
+        a = (math.sin(delta_lat/2)**2 +
+             math.cos(lat1_rad) * math.cos(lat2_rad) *
+             math.sin(delta_lon/2)**2)
+        c = 2 * math.atan2(math.sqrt(a), math.sqrt(1-a))
+        return R * c
+
+    def correlate_with_detection(self, detection_timestamp):
+        nearby_aircraft = self.get_nearby_aircraft()
+        return {
+            'timestamp': detection_timestamp,
+            'adsb_aircraft_count': len(nearby_aircraft),
+            'aircraft': nearby_aircraft
+        }
+
+    def set_camera_location(self, latitude, longitude):
+        self.camera_lat = latitude
+        self.camera_lon = longitude
 
 class AircraftTracker:
     """Tracks detected aircraft across multiple frames"""
@@ -428,6 +502,12 @@ def main():
     parser.add_argument('--confidence-threshold', type=float, default=0.6, help='Detection confidence threshold')
     parser.add_argument('--use-opencv', action='store_true',
                         help='Use OpenCV VideoCapture instead of libcamera')
+    parser.add_argument('--enable-adsb', action='store_true',
+                        help='Enable ADS-B correlation (requires RTL-SDR and readsb)')
+    parser.add_argument('--adsb-url', default='http://localhost:8080/data/aircraft.json',
+                        help='ADS-B JSON API URL')
+    parser.add_argument('--camera-lat', type=float, help='Camera latitude for distance calculations')
+    parser.add_argument('--camera-lon', type=float, help='Camera longitude for distance calculations')
     args = parser.parse_args()
 
     # Initialize camera
@@ -449,10 +529,14 @@ def main():
         contrast_threshold=args.contrast_threshold,
         confidence_threshold=args.confidence_threshold
     )
+
+    adsb_integration = ADSBIntegration(args.adsb_url)
+    if args.camera_lat and args.camera_lon:
+        adsb_integration.set_camera_location(args.camera_lat, args.camera_lon)
     
     # Start web interface if requested
     if args.web:
-        web = WebInterface(port=args.web_port)
+        web = WebInterface(port=args.web_port, camera=camera, adsb_integration=adsb_integration if args.enable_adsb else None)
         web.start()
     
     detection_active = True
@@ -478,17 +562,27 @@ def main():
                 image_path = None
                 if args.save_detections:
                     image_path = save_detection_image(frame, detection)
-                
+
+                detection_timestamp = datetime.now().isoformat()
+
                 # Record in database
-                db.record_detection(
-                    detection["x"], 
-                    detection["y"], 
-                    detection["width"], 
-                    detection["height"], 
-                    detection["contrast"], 
+                detection_id = db.record_detection(
+                    detection["x"],
+                    detection["y"],
+                    detection["width"],
+                    detection["height"],
+                    detection["contrast"],
                     detection["confidence"],
                     image_path
                 )
+
+                if args.enable_adsb and detection_id is not None:
+                    adsb_data = adsb_integration.correlate_with_detection(detection_timestamp)
+                    if adsb_data["adsb_aircraft_count"] > 0:
+                        logger.info(f"Visual detection correlates with {adsb_data['adsb_aircraft_count']} ADS-B aircraft")
+                    else:
+                        logger.info("Visual detection - no ADS-B correlation found")
+                    db.update_detection_with_adsb(detection_id, adsb_data)
             
             # Display frame if requested
             if args.display:

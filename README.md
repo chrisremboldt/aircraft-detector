@@ -22,6 +22,8 @@ Refer to [INSTALLATION.md](INSTALLATION.md) for a detailed setup guide. In short
 1. Raspberry Pi 5 (8&nbsp;GB recommended)
 2. Raspberry Pi camera module (rev&nbsp;1.3 or newer)
 3. MicroSD card (32&nbsp;GB or larger) and the official 27W USB‑C power supply
+4. RTL-SDR dongle (RTL-SDR Blog V4 recommended)
+5. 1090MHz ADS-B antenna (optional, improves reception range)
 
 ## Quick Start
 
@@ -58,6 +60,20 @@ After cloning the repository, run:
 python3 pi-aircraft-detector.py --web
 ```
 
+## Running the System with ADS-B Integration
+
+Manual Start with ADS-B:
+```bash
+cd ~/aircraft-detector
+python3 pi-aircraft-detector.py --web --web-port 8081 --enable-adsb --camera-lat YOUR_LAT --camera-lon YOUR_LON
+```
+
+Additional command-line options:
+- `--enable-adsb`: Enable ADS-B correlation features
+- `--adsb-url`: Custom ADS-B JSON API URL (default: http://localhost:8080/data/aircraft.json)
+- `--camera-lat` and `--camera-lon`: Camera coordinates for distance filtering
+- `--web-port 8081`: Use port 8081 (8080 is used by readsb)
+
 ## Project Structure
 
 - `pi-aircraft-detector.py` – main entry point
@@ -66,6 +82,13 @@ python3 pi-aircraft-detector.py --web
 - `web_interface.py` – optional Flask server
 - `templates/` – HTML template for the web dashboard
 - `detections/` – saved detection images (if enabled)
+
+## Access Interfaces
+
+After installation, you can access:
+- Aircraft Detection System: http://aircraft-detector.local:8081
+- ADS-B Map Interface: http://aircraft-detector.local:8080
+- ADS-B JSON API: http://aircraft-detector.local:8080/data/aircraft.json
 
 ## More Information
 
