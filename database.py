@@ -2,6 +2,7 @@
 import sqlite3
 import datetime
 import logging
+import json
 
 logger = logging.getLogger(__name__)
 
@@ -47,12 +48,28 @@ class Database:
                 )
             ''')
 
+            # Create ADS-B correlation table
+            self.create_adsb_correlation_table()
+
             self.conn.commit()
             logger.info("Database initialized successfully")
             return True
         except Exception as e:
             logger.error(f"Database initialization failed: {e}")
             return False
+
+    def create_adsb_correlation_table(self):
+        cursor = self.conn.cursor()
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS adsb_correlations (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                detection_id INTEGER,
+                aircraft_count INTEGER,
+                correlation_timestamp TEXT,
+                aircraft_data TEXT,
+                FOREIGN KEY (detection_id) REFERENCES detections (id)
+            )
+        ''')
 
     def close(self):
         """Close the database connection"""
@@ -127,4 +144,28 @@ class Database:
         except Exception as e:
             logger.error(f"Failed to get recent detections: {e}")
             return []
+
+    def update_detection_with_adsb(self, detection_id, adsb_data):
+        """Store ADS-B correlation data for a detection"""
+        if not self.conn:
+            logger.error("Database not initialized")
+            return False
+
+        try:
+            cursor = self.conn.cursor()
+            cursor.execute('''
+                INSERT INTO adsb_correlations
+                (detection_id, aircraft_count, correlation_timestamp, aircraft_data)
+                VALUES (?, ?, ?, ?)
+            ''', (
+                detection_id,
+                adsb_data.get('adsb_aircraft_count', 0),
+                adsb_data.get('timestamp'),
+                json.dumps(adsb_data.get('aircraft', []))
+            ))
+            self.conn.commit()
+            return True
+        except Exception as e:
+            logger.error(f"Failed to record ADS-B correlation: {e}")
+            return False
 

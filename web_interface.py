@@ -38,7 +38,7 @@ from database import Database
 class WebInterface:
     """Web interface for the aircraft detection system"""
 
-    def __init__(self, host='0.0.0.0', port=8080, snapshot_dir="snapshots", camera=None):
+    def __init__(self, host='0.0.0.0', port=8080, snapshot_dir="snapshots", camera=None, adsb_integration=None):
         """
         Initialize the web interface
         
@@ -51,6 +51,7 @@ class WebInterface:
         self.port = port
         self.snapshot_dir = snapshot_dir
         self.camera = camera
+        self.adsb_integration = adsb_integration
         self.app = Flask(__name__)
         
         # Create snapshot directory if it doesn't exist
@@ -95,6 +96,17 @@ class WebInterface:
             except Exception as e:
                 logger.error(f"Error getting detections: {e}")
                 return jsonify({"error": str(e)}), 500
+
+        @self.app.route('/api/adsb-status')
+        def adsb_status():
+            aircraft = []
+            if self.adsb_integration:
+                aircraft = self.adsb_integration.get_nearby_aircraft()
+            return jsonify({
+                'aircraft_count': len(aircraft),
+                'aircraft': aircraft,
+                'last_update': datetime.datetime.now().isoformat()
+            })
                 
         @self.app.route('/toggle_detection', methods=['POST'])
         def toggle_detection():
