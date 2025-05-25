@@ -23,6 +23,7 @@ import logging
 import time
 
 
+
 class RPiCamera:
     """Lightweight camera wrapper for V4L2/``libcamera`` devices."""
 
@@ -51,10 +52,12 @@ class RPiCamera:
         except Exception:
             pass
 
+
         # Give the camera a moment to warm up. Using time.sleep avoids
         # requiring the highgui module, which may be missing in minimal
         # OpenCV builds.
         time.sleep(0.1)
+
         return True
 
     def capture_frame(self):
