@@ -22,6 +22,11 @@ This guide covers installing the aircraft detection system on a Raspberry Pi wit
    sudo apt install -y python3-opencv python3-flask python3-numpy
    ```
 4. Enable the camera interface using `raspi-config` if it is not already enabled.
+5. If using the libcamera stack (default on recent Raspberry Pi OS releases),
+   ensure the V4L2 compatibility driver is loaded:
+   ```bash
+   sudo modprobe bcm2835-v4l2
+   ```
 
 ## Running the Detector
 

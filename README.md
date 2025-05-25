@@ -33,6 +33,8 @@ Refer to [INSTALLATION.md](INSTALLATION.md) for a detailed setup guide. In short
 
 If you encounter issues, check console output for specific error messages and verify the camera cable connections.
 
+If frames fail to capture even though the camera is detected ("Failed to capture frame" messages), ensure that the V4L2 compatibility driver is loaded and that the camera supports MJPEG output.  The built in `RPiCamera` class now sets the ``MJPG`` format automatically, but older installs may require enabling the legacy camera driver with ``modprobe bcm2835-v4l2``.
+
 For detailed troubleshooting, see [INSTALLATION.md](INSTALLATION.md).
 
 ### Command Summary for Users
