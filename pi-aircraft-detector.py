@@ -1,14 +1,13 @@
 #!/usr/bin/env python3
 """
-Aircraft Detection System for Raspberry Pi with 64MP ArduCam
+Aircraft Detection System for Raspberry Pi
 
 This system creates a visual "radar" to detect aircraft in flight by identifying
-small, high-contrast moving objects against the sky. It utilizes the 64MP ArduCam 
-with autofocus capabilities to capture high-resolution images and OpenCV for 
-computer vision processing.
+small, high-contrast moving objects against the sky. It uses a standard
+Raspberry Pi camera (any revision) accessed via OpenCV for frame capture.
 
 Architecture:
-1. Camera Module: 64MP ArduCam with autofocus
+1. Camera Module: Raspberry Pi camera module
 2. Processing Unit: Raspberry Pi (4 recommended for performance)
 3. Computer Vision: OpenCV for image processing and detection
 4. Data Storage: Local SQLite database for detection logging
@@ -16,12 +15,11 @@ Architecture:
 
 Requirements:
 - Raspberry Pi (4 or newer recommended)
-- 64MP ArduCam with autofocus
+- Raspberry Pi camera module (any revision)
 - Python 3.7+
 - OpenCV 4.x
 - SQLite3
 - Flask (for optional web interface)
-- ArduCam Python libraries
 """
 
 import cv2
@@ -36,7 +34,7 @@ from flask import Flask, Response, render_template
 import json
 import math
 
-from arducam_camera import ArduCam64MP as Camera
+from rpi_camera import RPiCamera as Camera
 from database import Database
 
 # Configure logging
@@ -435,22 +433,6 @@ def main():
         logger.error("Failed to initialize camera. Exiting.")
         return
 
-    # Some Arducam libraries expose different focus control APIs.  Use
-    # manual focus when available but don't crash if the method is missing.
-    try:
-        if hasattr(camera, "set_manual_focus"):
-            logger.info("Setting camera to infinity focus for aircraft detection...")
-            camera.set_manual_focus(0.0)
-        else:
-            # Older libraries may only provide `set_autofocus`.  Disable
-            # autofocus to keep the lens fixed if possible.
-            focus_method = getattr(camera, "set_autofocus", None)
-            if callable(focus_method):
-                logger.info("Disabling autofocus (manual focus API not available)")
-                focus_method(False)
-    except Exception as e:
-        logger.warning(f"Focus control unavailable: {e}")
-    
     # Initialize database
     db = Database(db_path)
     if not db.initialize():
