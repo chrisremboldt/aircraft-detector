@@ -7,8 +7,8 @@ The aircraft detection system is built with the following components:
 ```
 +------------------+      +-------------------+      +------------------+
 |                  |      |                   |      |                  |
-|  64MP ArduCam    +----->+  Raspberry Pi 5   +----->+  Web Interface   |
-|  with Autofocus  |      |  Processing Unit  |      |  (Optional)      |
+| Raspberry Pi Camera +-->+  Raspberry Pi 5   +----->+  Web Interface   |
+|                   |     |  Processing Unit  |      |  (Optional)      |
 |                  |      |                  |      |                  |
 +------------------+      +---------+--------+      +------------------+
                                     |
@@ -23,14 +23,7 @@ The aircraft detection system is built with the following components:
 
 ## Camera Considerations
 
-### 64MP ArduCam Hawkeye Specifications
-
-- **Sensor**: 64MP Sony IMX686 sensor
-- **Resolution**: 9248 x 6944 (native), but we use 4624 x 3472 for better performance
-- **Autofocus**: Hardware-based autofocus system
-- **Field of View**: Approximately 84° diagonal
-- **Interface**: MIPI CSI-2, compatible with Raspberry Pi
-- **Features**: Auto-exposure, auto white balance, HDR support
+The detector works with any Raspberry Pi camera module. Resolution and field of view will vary depending on the model.
 
 ### Performance Optimization
 
