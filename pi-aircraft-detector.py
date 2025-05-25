@@ -425,10 +425,15 @@ def main():
     parser.add_argument('--min-area', type=int, default=25, help='Minimum contour area')
     parser.add_argument('--contrast-threshold', type=int, default=50, help='Minimum contrast')
     parser.add_argument('--confidence-threshold', type=float, default=0.6, help='Detection confidence threshold')
+    parser.add_argument('--libcamera-bridge', action='store_true',
+                        help='Use libcamera-vid with v4l2loopback')
+    parser.add_argument('--bridge-device', default='/dev/video10',
+                        help='v4l2loopback device for libcamera bridge')
     args = parser.parse_args()
     
     # Initialize camera
-    camera = Camera()
+    camera = Camera(use_libcamera=args.libcamera_bridge,
+                    loopback_device=args.bridge_device)
     if not camera.initialize():
         logger.error("Failed to initialize camera. Exiting.")
         return
