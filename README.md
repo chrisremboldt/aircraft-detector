@@ -1,6 +1,10 @@
 # Aircraft Detector
 
-Pi-based system for tracking aircraft using a Raspberry Pi camera module and OpenCV. The project captures frames, detects motion in the sky, and logs confirmed aircraft sightings in a SQLite database. An optional Flask web interface lets you view detections and stream video remotely.
+Pi-based system for tracking aircraft using a Raspberry Pi camera module. Frames
+are captured via the libcamera stack (Picamera2) and processed with OpenCV. The
+project detects motion in the sky and logs confirmed aircraft sightings in a
+SQLite database. An optional Flask web interface lets you view detections and
+stream video remotely.
 
 ## Features
 
@@ -33,21 +37,14 @@ Refer to [INSTALLATION.md](INSTALLATION.md) for a detailed setup guide. In short
 
 If you encounter issues, check console output for specific error messages and verify the camera cable connections.
 
-If frames fail to capture even though the camera is detected ("Failed to capture frame" messages), ensure that the V4L2 compatibility driver is loaded and that the camera supports MJPEG output.  The built in `RPiCamera` class now sets the ``MJPG`` format automatically, but older installs may require enabling the legacy camera driver with ``modprobe bcm2835-v4l2``.
+If frames fail to capture, verify that the `python3-picamera2` package is installed
+and that the camera is enabled in `raspi-config`. The detector uses Picamera2 by
+default and falls back to OpenCV only when the `--use-opencv` flag is supplied.
 
-If OpenCV still fails to read frames, set up a bridge between libcamera and
-OpenCV using the `v4l2loopback` kernel module. Install the module and load a
-virtual device:
-
-```bash
-sudo apt install v4l2loopback-dkms
-sudo modprobe v4l2loopback video_nr=10 card_label="camera-bridge" exclusive_caps=1
-```
-
-Run the detector with bridging enabled:
+Run the detector normally with:
 
 ```bash
-python3 pi-aircraft-detector.py --web --libcamera-bridge
+python3 pi-aircraft-detector.py --web
 ```
 
 For detailed troubleshooting, see [INSTALLATION.md](INSTALLATION.md).
