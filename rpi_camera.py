@@ -20,6 +20,8 @@ initialisation to improve compatibility with ``libcamera`` devices.
 
 import cv2
 import logging
+import time
+
 
 
 class RPiCamera:
@@ -50,8 +52,12 @@ class RPiCamera:
         except Exception:
             pass
 
-        # Give the camera a moment to warm up
-        cv2.waitKey(100)
+
+        # Give the camera a moment to warm up. Using time.sleep avoids
+        # requiring the highgui module, which may be missing in minimal
+        # OpenCV builds.
+        time.sleep(0.1)
+
         return True
 
     def capture_frame(self):
