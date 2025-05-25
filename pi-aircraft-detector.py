@@ -3,8 +3,9 @@
 Aircraft Detection System for Raspberry Pi
 
 This system creates a visual "radar" to detect aircraft in flight by identifying
-small, high-contrast moving objects against the sky. It uses a standard
-Raspberry Pi camera (any revision) accessed via OpenCV for frame capture.
+small, high-contrast moving objects against the sky. Frames are captured using
+the libcamera stack through the Picamera2 library (OpenCV is only used for
+image processing).
 
 Architecture:
 1. Camera Module: Raspberry Pi camera module
@@ -425,15 +426,12 @@ def main():
     parser.add_argument('--min-area', type=int, default=25, help='Minimum contour area')
     parser.add_argument('--contrast-threshold', type=int, default=50, help='Minimum contrast')
     parser.add_argument('--confidence-threshold', type=float, default=0.6, help='Detection confidence threshold')
-    parser.add_argument('--libcamera-bridge', action='store_true',
-                        help='Use libcamera-vid with v4l2loopback')
-    parser.add_argument('--bridge-device', default='/dev/video10',
-                        help='v4l2loopback device for libcamera bridge')
+    parser.add_argument('--use-opencv', action='store_true',
+                        help='Use OpenCV VideoCapture instead of libcamera')
     args = parser.parse_args()
-    
+
     # Initialize camera
-    camera = Camera(use_libcamera=args.libcamera_bridge,
-                    loopback_device=args.bridge_device)
+    camera = Camera(use_opencv=args.use_opencv)
     if not camera.initialize():
         logger.error("Failed to initialize camera. Exiting.")
         return
