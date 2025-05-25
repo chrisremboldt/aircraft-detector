@@ -27,12 +27,14 @@ This guide covers installing the aircraft detection system on a Raspberry Pi wit
    ```bash
    sudo modprobe bcm2835-v4l2
    ```
+
 6. If OpenCV cannot read frames, install the v4l2loopback module and create a
    virtual camera device for bridging:
    ```bash
    sudo apt install v4l2loopback-dkms
    sudo modprobe v4l2loopback video_nr=10 card_label="camera-bridge" exclusive_caps=1
    ```
+
 
 ## Running the Detector
 
