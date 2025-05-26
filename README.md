@@ -2,14 +2,14 @@
 
 Pi-based system for tracking aircraft using a Raspberry Pi camera module. Frames
 are captured via the libcamera stack (Picamera2) and processed with OpenCV. The
-project detects motion in the sky and logs confirmed aircraft sightings in a
+project detects motion and contrast anywhere in the frame and logs confirmed aircraft sightings in a
 SQLite database. An optional Flask web interface lets you view detections and
 stream video remotely.
 
 ## Features
 
 - Real-time camera feed
-- Sky segmentation and motion detection to isolate potential aircraft
+- Motion and contrast detection to isolate potential aircraft
 - Object tracking across frames with speed and direction estimation
 - SQLite database for storing detections and tracking data
 - Optional web dashboard for video streaming and system control

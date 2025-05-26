@@ -271,143 +271,176 @@ class ImageProcessor:
         return sky_mask
         
     def process_frame(self, frame):
-        """
-        Process a single frame to detect aircraft
-        Returns the annotated frame and a list of detections
-        """
+        """Process a single frame to detect aircraft using motion and contrast."""
         self.frame_count += 1
         detections = []
-        
-        # Skip if frame is None
+
         if frame is None:
             return frame, detections
-            
-        # Create a copy of the frame for annotations
+
         annotated_frame = frame.copy()
-        
-        # Convert to grayscale
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        
-        # Apply Gaussian blur to reduce noise
-        gray = cv2.GaussianBlur(gray, (21, 21), 0)
-        
-        # Detect sky region
-        sky_mask = self.detect_sky(frame)
-        
-        # Initialize previous frame if not available
+
+        # Light blur to preserve small objects
+        gray = cv2.GaussianBlur(gray, (5, 5), 0)
+
         if self.prev_gray is None:
             self.prev_gray = gray.copy()
             return annotated_frame, detections
-            
-        # Motion detection: calculate absolute difference between frames
+
+        # STEP 1: Motion detection
         frame_delta = cv2.absdiff(self.prev_gray, gray)
-        
-        # Apply threshold to highlight significant changes
-        thresh = cv2.threshold(frame_delta, 25, 255, cv2.THRESH_BINARY)[1]
-        
-        # Dilate thresholded image to fill in holes
-        thresh = cv2.dilate(thresh, None, iterations=2)
-        
-        # Apply sky mask to focus only on motion in the sky
-        thresh = cv2.bitwise_and(thresh, thresh, mask=sky_mask)
-        
-        # Find contours of moving objects
-        contours, _ = cv2.findContours(thresh.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-        
-        # List to store centroids of detected objects
+
+        motion_thresh = cv2.adaptiveThreshold(
+            frame_delta, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+            cv2.THRESH_BINARY, 11, 2
+        )
+
+        kernel_small = np.ones((3, 3), np.uint8)
+        motion_thresh = cv2.morphologyEx(motion_thresh, cv2.MORPH_OPEN, kernel_small)
+        motion_thresh = cv2.dilate(motion_thresh, kernel_small, iterations=1)
+
+        contours, _ = cv2.findContours(motion_thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
         centroids = []
-        
-        # Process each contour
+
         for contour in contours:
-            # Filter by contour area - adjust minimum size as needed
             area = cv2.contourArea(contour)
-            if area < self.min_area:
+            if area < self.min_area or area > 2000:
                 continue
-                
-            # Get bounding box
+
             (x, y, w, h) = cv2.boundingRect(contour)
-            
-            # Calculate centroid
-            centroid_x = int(x + w/2)
-            centroid_y = int(y + h/2)
-            
-            # Skip if not in sky region
-            if sky_mask[centroid_y, centroid_x] == 0:
+
+            aspect_ratio = w / h if h > 0 else 0
+            if aspect_ratio < 0.2 or aspect_ratio > 5.0:
                 continue
-                
-            # Calculate contrast ratio in the region
+
             roi = gray[y:y+h, x:x+w]
-            min_val, max_val, _, _ = cv2.minMaxLoc(roi)
-            contrast = max_val - min_val
-            
-            # Only mark high-contrast moving objects
-            if contrast > self.contrast_threshold:
-                # Calculate confidence based on contrast and size
-                confidence = min(1.0, (contrast / 255) * (area / 100))
-                
-                if confidence >= self.confidence_threshold:
-                    # Add centroid to list for tracking
-                    centroids.append((centroid_x, centroid_y))
-                    
-                    # Store detection
-                    detections.append({
-                        "x": x,
-                        "y": y,
-                        "width": w,
-                        "height": h,
-                        "centroid": (centroid_x, centroid_y),
-                        "contrast": contrast,
-                        "confidence": confidence,
-                        "area": area
-                    })
-        
-        # Update aircraft tracker
+            if roi.size == 0:
+                continue
+
+            roi_mean = np.mean(roi)
+
+            padding = max(10, max(w, h))
+            x1 = max(0, x - padding)
+            y1 = max(0, y - padding)
+            x2 = min(gray.shape[1], x + w + padding)
+            y2 = min(gray.shape[0], y + h + padding)
+
+            background_roi = gray[y1:y2, x1:x2]
+            background_mean = np.mean(background_roi)
+
+            contrast = abs(roi_mean - background_mean)
+
+            internal_contrast = np.std(roi)
+
+            contrast_score = min(1.0, contrast / 100.0)
+
+            optimal_size = 100
+            size_score = 1.0 - abs(area - optimal_size) / optimal_size
+            size_score = max(0, min(1.0, size_score))
+
+            perimeter = cv2.arcLength(contour, True)
+            if perimeter > 0:
+                circularity = 4 * np.pi * area / (perimeter * perimeter)
+                shape_score = min(1.0, circularity * 2)
+            else:
+                shape_score = 0
+
+            movement_score = min(1.0, np.sum(motion_thresh[y:y+h, x:x+w]) / (w * h * 255))
+
+            confidence = (
+                contrast_score * 0.4 +
+                size_score * 0.2 +
+                shape_score * 0.2 +
+                movement_score * 0.2
+            )
+
+            if confidence >= self.confidence_threshold:
+                centroid_x = int(x + w / 2)
+                centroid_y = int(y + h / 2)
+                centroids.append((centroid_x, centroid_y))
+
+                detections.append({
+                    "x": x,
+                    "y": y,
+                    "width": w,
+                    "height": h,
+                    "centroid": (centroid_x, centroid_y),
+                    "contrast": contrast,
+                    "confidence": confidence,
+                    "area": area,
+                    "aspect_ratio": aspect_ratio,
+                    "movement_score": movement_score,
+                    "shape_score": shape_score,
+                })
+
         tracked_objects = self.tracker.update(centroids)
-        
-        # Draw tracking objects on frame
+
         for object_id, object_data in tracked_objects.items():
             centroid = object_data["centroid"]
             speed = object_data["speed"]
             direction = object_data["direction"]
-            
-            # Draw centroid and ID
+
             cv2.circle(annotated_frame, centroid, 4, (0, 255, 0), -1)
-            cv2.putText(annotated_frame, f"ID: {object_id}", 
-                       (centroid[0] - 10, centroid[1] - 10), 
-                       cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
-                       
-            # Draw trajectory
+            cv2.putText(
+                annotated_frame,
+                f"ID: {object_id}",
+                (centroid[0] - 10, centroid[1] - 10),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.5,
+                (0, 255, 0),
+                2,
+            )
+
             trajectory = object_data["trajectory"]
             if len(trajectory) > 1:
                 for i in range(1, len(trajectory)):
                     cv2.line(annotated_frame, trajectory[i-1], trajectory[i], (0, 255, 0), 2)
-                    
-            # Add speed and direction info
-            cv2.putText(annotated_frame, 
-                       f"Spd: {speed:.1f} Dir: {direction:.0f}°", 
-                       (centroid[0] - 10, centroid[1] + 10), 
-                       cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
-        
-        # Draw detections on frame
+
+            cv2.putText(
+                annotated_frame,
+                f"Spd: {speed:.1f} Dir: {direction:.0f}°",
+                (centroid[0] - 10, centroid[1] + 10),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.5,
+                (0, 255, 0),
+                2,
+            )
+
         for detection in detections:
             x, y, w, h = detection["x"], detection["y"], detection["width"], detection["height"]
-            
-            # Draw rectangle around aircraft
-            cv2.rectangle(annotated_frame, (x, y), (x + w, y + h), (0, 0, 255), 2)
-            
-            # Draw detection info
-            cv2.putText(annotated_frame, 
-                       f"Aircraft? (Conf: {detection['confidence']:.2f})", 
-                       (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 2)
-        
-        # Update previous frame
+            conf = detection["confidence"]
+
+            if conf < 0.4:
+                color = (0, 0, 255)
+            elif conf < 0.7:
+                color = (0, 255, 255)
+            else:
+                color = (0, 255, 0)
+
+            cv2.rectangle(annotated_frame, (x, y), (x + w, y + h), color, 2)
+            cv2.putText(
+                annotated_frame,
+                f"Aircraft? {conf:.2f}",
+                (x, y - 10),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.5,
+                color,
+                2,
+            )
+
+        cv2.putText(
+            annotated_frame,
+            f"Frame: {self.frame_count} | Motion Objects: {len(contours)} | Detections: {len(detections)}",
+            (10, 30),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.6,
+            (255, 255, 255),
+            2,
+        )
+
         self.prev_gray = gray.copy()
-        
-        # Add frame info
-        cv2.putText(annotated_frame, 
-                   f"Frame: {self.frame_count} | Detections: {len(detections)}", 
-                   (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
-        
         return annotated_frame, detections
 
 class WebInterface:
