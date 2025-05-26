@@ -31,11 +31,12 @@ import datetime
 import threading
 import argparse
 import logging
-from flask import Flask, Response, render_template
 import json
 import math
 import requests
 from datetime import datetime
+import web_interface
+from web_interface import WebInterface
 
 from rpi_camera import RPiCamera as Camera
 from database import Database
@@ -53,8 +54,6 @@ logger = logging.getLogger(__name__)
 
 # Global variables
 detected_aircraft = []
-current_frame = None
-detection_active = False
 db_path = "aircraft_detections.db"
 
 class ADSBIntegration:
@@ -443,55 +442,6 @@ class ImageProcessor:
         self.prev_gray = gray.copy()
         return annotated_frame, detections
 
-class WebInterface:
-    """Optional web interface for viewing detections"""
-    
-    def __init__(self, host='0.0.0.0', port=8080):
-        self.host = host
-        self.port = port
-        self.app = Flask(__name__)
-        self.setup_routes()
-        
-    def setup_routes(self):
-        """Set up Flask routes"""
-        @self.app.route('/')
-        def index():
-            return render_template('index.html')
-            
-        @self.app.route('/video_feed')
-        def video_feed():
-            return Response(self.generate_frames(),
-                           mimetype='multipart/x-mixed-replace; boundary=frame')
-                           
-        @self.app.route('/detections')
-        def get_detections():
-            db = Database(db_path)
-            db.initialize()
-            detections = db.get_recent_detections(100)
-            db.close()
-            return json.dumps(detections)
-            
-    def generate_frames(self):
-        """Generate video frames for streaming"""
-        while True:
-            if current_frame is not None:
-                # Encode frame as JPEG
-                ret, buffer = cv2.imencode('.jpg', current_frame)
-                if not ret:
-                    continue
-                    
-                # Yield the frame in the correct format for Flask streaming response
-                yield (b'--frame\r\n'
-                      b'Content-Type: image/jpeg\r\n\r\n' + buffer.tobytes() + b'\r\n')
-                      
-            time.sleep(0.1)  # Small delay to reduce CPU usage
-            
-    def start(self):
-        """Start the web server in a separate thread"""
-        threading.Thread(target=lambda: self.app.run(
-            host=self.host, port=self.port, debug=False
-        ), daemon=True).start()
-        logger.info(f"Web interface started at http://{self.host}:{self.port}")
 
 def save_detection_image(frame, detection, output_dir="detections"):
     """Save an image of a detected aircraft"""
@@ -522,7 +472,6 @@ def save_detection_image(frame, detection, output_dir="detections"):
 
 def main():
     """Main function to run the aircraft detection system"""
-    global current_frame, detection_active
     
     # Parse command-line arguments
     parser = argparse.ArgumentParser(description='Aircraft Detection System')
@@ -569,13 +518,14 @@ def main():
     
     # Start web interface if requested
     if args.web:
-        web = WebInterface(port=args.web_port, camera=camera, adsb_integration=adsb_integration if args.enable_adsb else None)
+        web = WebInterface(port=args.web_port, camera=camera,
+                           adsb_integration=adsb_integration if args.enable_adsb else None)
         web.start()
-    
-    detection_active = True
+
+    web_interface.detection_active = True
     
     try:
-        while detection_active:
+        while web_interface.detection_active:
             # Capture frame
             frame = camera.capture_frame()
             if frame is None:
@@ -587,7 +537,7 @@ def main():
             annotated_frame, detections = processor.process_frame(frame)
             
             # Update global current frame for web interface
-            current_frame = annotated_frame
+            web_interface.current_frame = annotated_frame
             
             # Record detections in database
             for detection in detections:
@@ -631,7 +581,7 @@ def main():
         logger.error(f"Error in main loop: {e}")
     finally:
         # Cleanup
-        detection_active = False
+        web_interface.detection_active = False
         camera.release()
         db.close()
         
