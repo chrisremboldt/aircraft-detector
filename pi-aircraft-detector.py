@@ -34,7 +34,6 @@ import logging
 import json
 import math
 import requests
-from datetime import datetime
 import web_interface
 from web_interface import WebInterface
 
@@ -546,7 +545,7 @@ def main():
                 if args.save_detections:
                     image_path = save_detection_image(frame, detection)
 
-                detection_timestamp = datetime.now().isoformat()
+                detection_timestamp = datetime.datetime.now().isoformat()
 
                 # Record in database
                 detection_id = db.record_detection(
