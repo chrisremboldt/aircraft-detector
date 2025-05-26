@@ -52,7 +52,7 @@ switch_to_mutability() {
         echo "  Service: dump1090-mutability.service"
         echo ""
         echo "🚀 Start aircraft detector with:"
-        echo "  python3 pi-aircraft-detector.py --web --web-port 8081 --enable-adsb --adsb-json-dir /run/dump1090-mutability --camera-lat YOUR_LAT --camera-lon YOUR_LON"
+        echo "  python3 pi-aircraft-detector.py --web --web-port 8081 --enable-adsb --adsb-url http://localhost:8080/data/aircraft.json --camera-lat YOUR_LAT --camera-lon YOUR_LON"
     else
         echo "❌ Failed to start dump1090-mutability"
         sudo systemctl status dump1090-mutability --no-pager
@@ -88,7 +88,7 @@ switch_to_fa() {
         echo "  Service: dump1090-fa.service"
         echo ""
         echo "🚀 Start aircraft detector with:"
-        echo "  python3 pi-aircraft-detector.py --web --web-port 8081 --enable-adsb --adsb-json-dir /run/dump1090-fa --camera-lat YOUR_LAT --camera-lon YOUR_LON"
+        echo "  python3 pi-aircraft-detector.py --web --web-port 8081 --enable-adsb --adsb-url http://localhost:8080/data/aircraft.json --camera-lat YOUR_LAT --camera-lon YOUR_LON"
     else
         echo "❌ Failed to start dump1090-fa"
         sudo systemctl status dump1090-fa --no-pager

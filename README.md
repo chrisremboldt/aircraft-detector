@@ -64,7 +64,7 @@ The setup script will:
    python3 pi-aircraft-detector.py --web --web-port 8081 --save-detections
    
    # With ADS-B integration (requires setup from INSTALLATION.md)
-   python3 pi-aircraft-detector.py --web --web-port 8081 --enable-adsb --adsb-url http://localhost:8080/data/aircraft.json --camera-lat YOUR_LAT --camera-lon YOUR_LON --save-detections
+   python3 pi-aircraft-detector.py --web --web-port 8081 --enable-adsb --adsb-url http://localhost:8080/data/aircraft.json --camera-lat 36.0200 --camera-lon -86.7000 --save-detections
    ```
 
 4. **Access Web Interface**: Open `http://<pi-address>:8081`
@@ -88,10 +88,10 @@ For detailed troubleshooting, see [INSTALLATION.md](INSTALLATION.md).
 ssh aircraft-detector@192.168.1.243
 
 # Run aircraft detector remotely with ADS-B (Nashville coordinates)
-ssh aircraft-detector@192.168.1.243 "cd /home/aircraft-detector && python3 pi-aircraft-detector.py --web --enable-adsb --adsb-json-dir /run/dump1090-mutability --camera-lat 36.02316650611701 --camera-lon -86.70226195080218 --save-detections --port 8081"
+ssh aircraft-detector@192.168.1.243 "cd /home/aircraft-detector && python3 pi-aircraft-detector.py --web --enable-adsb --adsb-url http://localhost:8080/data/aircraft.json --camera-lat 36.0200 --camera-lon -86.7000 --save-detections --web-port 8081"
 
 # Run with dump1090-fa decoder
-ssh aircraft-detector@192.168.1.243 "cd /home/aircraft-detector && python3 pi-aircraft-detector.py --web --enable-adsb --adsb-json-dir /run/dump1090-fa --camera-lat 36.02316650611701 --camera-lon -86.70226195080218 --save-detections --port 8081"
+ssh aircraft-detector@192.168.1.243 "cd /home/aircraft-detector && python3 pi-aircraft-detector.py --web --enable-adsb --adsb-url http://localhost:8080/data/aircraft.json --camera-lat 36.0200 --camera-lon -86.7000 --save-detections --web-port 8081"
 
 # Copy files to/from Pi
 scp file.txt aircraft-detector@192.168.1.243:/home/aircraft-detector/
@@ -105,13 +105,13 @@ scp aircraft-detector@192.168.1.243:/home/aircraft-detector/file.txt ./
 python3 pi-aircraft-detector.py --web --web-port 8081 --save-detections
 
 # Full ADS-B integration (dump1090-mutability)
-python3 pi-aircraft-detector.py --web --web-port 8081 --enable-adsb --adsb-json-dir /run/dump1090-mutability --camera-lat 36.02316650611701 --camera-lon -86.70226195080218 --save-detections
+python3 pi-aircraft-detector.py --web --web-port 8081 --enable-adsb --adsb-url http://localhost:8080/data/aircraft.json --camera-lat 36.0200 --camera-lon -86.7000 --save-detections
 
 # Full ADS-B integration (dump1090-fa)
-python3 pi-aircraft-detector.py --web --web-port 8081 --enable-adsb --adsb-json-dir /run/dump1090-fa --camera-lat 36.02316650611701 --camera-lon -86.70226195080218 --save-detections
+python3 pi-aircraft-detector.py --web --web-port 8081 --enable-adsb --adsb-url http://localhost:8080/data/aircraft.json --camera-lat 36.0200 --camera-lon -86.7000 --save-detections
 
 # Run in background (detached)
-nohup python3 pi-aircraft-detector.py --web --web-port 8081 --enable-adsb --adsb-json-dir /run/dump1090-mutability --camera-lat 36.02316650611701 --camera-lon -86.70226195080218 --save-detections > detector.log 2>&1 &
+nohup python3 pi-aircraft-detector.py --web --web-port 8081 --enable-adsb --adsb-url http://localhost:8080/data/aircraft.json --camera-lat 36.0200 --camera-lon -86.7000 --save-detections > detector.log 2>&1 &
 ```
 
 ### ADS-B Decoder Management
@@ -261,7 +261,7 @@ sudo journalctl -p err --since today
 
 ```bash
 # Nashville area coordinates (update for your location)
---camera-lat 36.02316650611701 --camera-lon -86.70226195080218
+--camera-lat 36.0200 --camera-lon -86.7000
 
 # Example for other locations:
 # New York: --camera-lat 40.7128 --camera-lon -74.0060
@@ -278,7 +278,7 @@ After cloning the repository and following [INSTALLATION.md](INSTALLATION.md), r
 python3 pi-aircraft-detector.py --web --web-port 8081
 
 # Run with ADS-B integration
-python3 pi-aircraft-detector.py --web --web-port 8081 --enable-adsb --adsb-url http://localhost:8080/data/aircraft.json --camera-lat YOUR_LAT --camera-lon YOUR_LON
+python3 pi-aircraft-detector.py --web --web-port 8081 --enable-adsb --adsb-url http://localhost:8080/data/aircraft.json --camera-lat 36.0200 --camera-lon -86.7000
 ```
 
 ## Running the System with ADS-B Integration
@@ -287,7 +287,7 @@ After completing the ADS-B setup from [INSTALLATION.md](INSTALLATION.md):
 
 ```bash
 cd ~/aircraft-detector
-python3 pi-aircraft-detector.py --web --web-port 8081 --enable-adsb --adsb-url http://localhost:8080/data/aircraft.json --camera-lat YOUR_LAT --camera-lon YOUR_LON
+python3 pi-aircraft-detector.py --web --web-port 8081 --enable-adsb --adsb-url http://localhost:8080/data/aircraft.json --camera-lat 36.0200 --camera-lon -86.7000
 ```
 
 Important command-line options for ADS-B:
@@ -303,12 +303,14 @@ This system supports two ADS-B decoders that you can switch between:
 #### Option 1: dump1090-mutability (Default)
 - **Pros**: Package-managed, proven stable, includes web interface
 - **JSON Data**: `/run/dump1090-mutability/aircraft.json`
-- **Command**: `--adsb-json-dir /run/dump1090-mutability`
+- **HTTP Endpoint**: `http://localhost:8080/data/aircraft.json`
 
 #### Option 2: dump1090-fa (FlightAware)
 - **Pros**: Latest optimizations, better performance, ARM64 SIMD support  
 - **JSON Data**: `/run/dump1090-fa/aircraft.json`
-- **Command**: `--adsb-json-dir /run/dump1090-fa`
+- **HTTP Endpoint**: `http://localhost:8080/data/aircraft.json`
+
+**Note**: Both decoders serve their data at the same HTTP endpoint when active.
 
 #### Switching Between Decoders
 
@@ -320,7 +322,7 @@ sudo systemctl start dump1090-fa
 sudo systemctl enable dump1090-fa
 
 # Update aircraft detector command
-python3 pi-aircraft-detector.py --web --web-port 8081 --enable-adsb --adsb-json-dir /run/dump1090-fa --camera-lat YOUR_LAT --camera-lon YOUR_LON
+python3 pi-aircraft-detector.py --web --web-port 8081 --enable-adsb --adsb-url http://localhost:8080/data/aircraft.json --camera-lat 36.0200 --camera-lon -86.7000
 ```
 
 **To switch back to dump1090-mutability:**
@@ -331,7 +333,7 @@ sudo systemctl start dump1090-mutability
 sudo systemctl enable dump1090-mutability
 
 # Update aircraft detector command  
-python3 pi-aircraft-detector.py --web --web-port 8081 --enable-adsb --adsb-json-dir /run/dump1090-mutability --camera-lat YOUR_LAT --camera-lon YOUR_LON
+python3 pi-aircraft-detector.py --web --web-port 8081 --enable-adsb --adsb-url http://localhost:8080/data/aircraft.json --camera-lat 36.0200 --camera-lon -86.7000
 ```
 
 For detailed information about each decoder, see [INSTALLATION.md](INSTALLATION.md) and [TECHNICAL_NOTES.md](TECHNICAL_NOTES.md).
