@@ -25,27 +25,84 @@ This guide covers installing the aircraft detection system on a Raspberry Pi wit
     ```
 
 ## 4. Install ADS-B Reception Tools
+
+### Install RTL-SDR Tools
 ```bash
 sudo apt install -y rtl-sdr librtlsdr-dev
+```
 
+Test your RTL-SDR device:
+```bash
 rtl_test
-
-sudo apt install -y readsb
-
-sudo nano /etc/default/readsb
 ```
-Add this configuration to the file:
+You should see output showing your RTL-SDR device is detected and working.
+
+### Install readsb (ADS-B Decoder)
+
+Since readsb isn't available as a package, we'll compile it from source:
+
 ```bash
-RECEIVER_OPTIONS="--device-index 0 --gain -10 --ppm 0"
-DECODER_OPTIONS="--max-range 300"
-NET_OPTIONS="--net --net-heartbeat 60 --net-ro-size 1280 --net-ro-interval 0.2 --net-http-port 8080 --net-bind-address 127.0.0.1"
-JSON_OPTIONS="--write-json /var/cache/readsb"
+# Install build dependencies
+sudo apt install -y git build-essential pkg-config libusb-1.0-0-dev librtlsdr-dev libncurses5-dev zlib1g-dev
+
+# Clone and build readsb
+git clone https://github.com/wiedehopf/readsb.git
+cd readsb
+make
+
+# Install the binary
+sudo cp readsb /usr/local/bin/
+sudo chmod +x /usr/local/bin/readsb
 ```
-Enable and start readsb service
+
+### Configure readsb Service
+
+Create a readsb user and directories:
 ```bash
+# Create readsb user
+sudo useradd --system --no-create-home --shell /bin/false readsb
+
+# Create runtime directory
+sudo mkdir -p /var/run/readsb
+sudo chown readsb:readsb /var/run/readsb
+
+# Add readsb user to plugdev group (for RTL-SDR access)
+sudo usermod -a -G plugdev readsb
+```
+
+Create the systemd service file:
+```bash
+sudo nano /etc/systemd/system/readsb.service
+```
+
+Add this content (replace YOUR_LATITUDE and YOUR_LONGITUDE with your actual coordinates):
+```ini
+[Unit]
+Description=readsb ADS-B decoder
+After=network.target
+
+[Service]
+Type=simple
+User=readsb
+Group=readsb
+ExecStart=/usr/local/bin/readsb --device-type rtlsdr --gain -10 --lat YOUR_LATITUDE --lon YOUR_LONGITUDE --write-json /var/run/readsb --write-json-every 1 --json-location-accuracy 2 --net --net-http-port 8080 --quiet
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+```
+
+**Example coordinates format:** For Nashville, TN use:
+- `--lat 36.0200 --lon -86.7000`
+
+Enable and start readsb service:
+```bash
+sudo systemctl daemon-reload
 sudo systemctl enable readsb
 sudo systemctl start readsb
 ```
+
 5. Enable the camera interface using `raspi-config` if it is not already enabled.
 6. Verify the camera works with `libcamera-hello` before running the detector.
 
@@ -55,7 +112,11 @@ sudo systemctl start readsb
 Clone this repository and run:
 
 ```bash
+# Basic operation
 python3 pi-aircraft-detector.py --web
+
+# With ADS-B integration (replace with your coordinates)
+python3 pi-aircraft-detector.py --web --enable-adsb --camera-lat 36.02316650611701 --camera-lon -86.70226195080218
 ```
 
 Open `http://<pi-address>:8080` in your browser to view the web interface.
@@ -87,4 +148,10 @@ sudo systemctl start aircraft-detector
    ```bash
    curl http://localhost:8080/data/aircraft.json
    ```
-4. Verify integration in aircraft detector logs
+   You should see JSON data with nearby aircraft if any are transmitting ADS-B signals.
+
+4. Verify integration in aircraft detector logs:
+   ```bash
+   python3 pi-aircraft-detector.py --enable-adsb --camera-lat YOUR_LAT --camera-lon YOUR_LON
+   ```
+   Look for log messages about ADS-B correlation with visual detections.
