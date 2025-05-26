@@ -484,7 +484,7 @@ def main():
     parser.add_argument('--use-opencv', action='store_true',
                         help='Use OpenCV VideoCapture instead of libcamera')
     parser.add_argument('--enable-adsb', action='store_true',
-                        help='Enable ADS-B correlation (requires RTL-SDR and readsb)')
+                        help='Enable ADS-B correlation (requires RTL-SDR and dump1090-mutability)')
     parser.add_argument('--adsb-url', default='http://localhost:8080/data/aircraft.json',
                         help='ADS-B JSON API URL')
     parser.add_argument('--camera-lat', type=float, help='Camera latitude for distance calculations')

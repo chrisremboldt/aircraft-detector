@@ -25,4 +25,11 @@ Thumbs.db
 
 # Project specific
 detections/*
-!detections/.gitkeep 
+!detections/.gitkeep
+aircraft_detections.db
+aircraft_detections_backup_*.db
+*.log
+nohup.out
+
+# Runtime directories that may be created during testing
+/run/ 
